@@ -12,26 +12,30 @@ A `yard.yaml` file is used to compose modules into Containerfiles.
 inputs:
   # Modules found on local paths
   paths:
-    moduleName1: path/to/module
-    moduleName2: path/to/module
+    module1: path/to/module
+    module2: path/to/module
   # Modules found in a remote repos
   remotes:
     - url: http://example.com
       ref: v1.0
       paths:
-        moduleName3: path/to/module
-        moduleName4: path/to/module
+        module3: path/to/module
+        module4: path/to/module
 
 outputs:
-  # Output Containerfile name
+  # Output Containerfile created from modules
   containerFile1:
-    # Name of the module
-    moduleName1:
-      templateVarName1: value # use `value` for `templateVarName1`
-      templateVarName2: # use env variable for template variable `templateVarName2`
+    module1:
+      templateVar1: value # use `value` for `templateVar1`
+      templateVar2: # use env variable for template variable `templateVar2`
+    module2:
+      ...
+    module3:
+      ...
+    module4:
       ...
   containerFile2:
-...
+    ...
 ```
 ## Building
 Building Containerfiles from a `yard.yaml` file is as simple as
