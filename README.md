@@ -127,7 +127,7 @@ Module repositories are used to save and load pre-configured modules. A module r
 
 ## Why Use Container Yard Over Nix Flakes
 
-Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different packages managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
+Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different package managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
 
 ## Module Repositories
 
