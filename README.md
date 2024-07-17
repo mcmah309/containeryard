@@ -127,10 +127,9 @@ RUN pip install -r requirements.txt
 
 >Note: When using commands such as `COPY` in `Containerfile`, `COPY` cannot reference any file above it's current directory.
 
-`yard-module.yaml` is mainly a list of arguments expected by the module and any required files for commands like `Copy`.
+`yard-module.yaml` is mainly a list of arguments expected by the module.
 ```yaml
-name: example_module
-description: "This is an example module"
+description: "This is a modules description"
 args:
   required:
     - app_source
