@@ -1,11 +1,13 @@
-# containeryard
+# Container Yard
 
-Containeryard introduces the concept of modules to Containerfiles (aka Dockerfiles). 
-A module is a Tera template for part of a Containerfile, which can be combined with other modules to create a containerfiles.
+Container Yard is a declarative reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-A yard.yaml file is used to compose modules into Containerfiles
+Container Yard introduces the concept of modules to Containerfiles. 
+A module is a Tera template for part of a Containerfile, which can be combined with other modules to create a Containerfile.
 
-## yard.yaml Example Specification
+A `yard.yaml` file is used to compose modules into Containerfiles
+
+## `yard.yaml` Example Specification
 ```yaml
 inputs:
     name1: path/to/module
@@ -25,10 +27,10 @@ outputs:
 ```
 
 ## Templates
-containeryard allows using templates to easily setup projects.
+Container Yard allows using templates to easily setup projects.
 
 ### Initialization
-yard.yaml can be created with or without templates. You can create your own templates to get your projects up and running fast.
+`yard.yaml` can be created with or without templates. You can create your own templates to get your projects up and running fast.
 
 #### No Template
 
@@ -63,7 +65,7 @@ Initialize a `yard.yaml` file from a remote template.
 
     Save all templates repository.
     ```bash
-    yard save <REPO_URL>
+    yard save <REPO_URL_WITH_HASH>
     ```
 2. Initialize the `yard.yaml` file.
     ```bash
@@ -100,7 +102,7 @@ path/to/dir2/
 ```
 Which are imported with
 ```bash
-yard save <REPO_URL>
+yard save <REPO_URL_WITH_HASH>
 ```
 These then can be used to generate templates locally.
 ```bash
@@ -139,8 +141,6 @@ outputs:
             key2: # env variable
 ```
 
-## Todo
+## Why Use Container Yard Over Nix Flakes
 
-- Use Tera
-- Use yaml to build layers 
-- allow specifying paths or git url for templates to import. Git urls require a commit hash.
+Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different packages managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
