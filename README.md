@@ -131,7 +131,7 @@ Nix flakes guarantees reproducibility at the cost of developer flexibility. Cont
 
 ## Module Repositories
 
-- <https://github.com/mcmah309/containeryard_module_repository.git> - The Official Module Repository.
+- <https://github.com/mcmah309/containeryard_repository.git> - The Official Module Repository.
 
 **\*Feel free to create a PR to add your own!\***
 
