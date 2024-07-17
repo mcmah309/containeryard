@@ -5,24 +5,32 @@ Container Yard is a declarative reusable decentralized approach for defining con
 Container Yard introduces the concept of modules to Containerfiles. 
 A module is a Tera template for part of a Containerfile, which can be combined with other modules to create a Containerfile.
 
-A `yard.yaml` file is used to compose modules into Containerfiles
+A `yard.yaml` file is used to compose modules into Containerfiles.
 
 ## `yard.yaml` Example Specification
 ```yaml
 inputs:
-    name1: path/to/module
-    name2:
-        url:
-        ref:
+  # Modules found on local paths
+  paths:
+    moduleName1: path/to/module
+    moduleName2: path/to/module
+  remote:
+    # Modules found in a remote repo
+    - url: http://example.com
+      ref: v1.0
+      paths:
+        moduleName3: path/to/module
+        moduleName4: path/to/module
 
 outputs:
-   containerFile1:
-        name1:
-            key1: value
-            key2: # env variable
-        name2.path.to.module:
-            ...
-    containerFile2:
+  # Output Containerfile name
+  containerFile1:
+    # Name of the module
+    moduleName1:
+      templateVarName1: value # use `value` for `templateVarName1`
+      templateVarName2: # use env variable for template variable `templateVarName2`
+      ...
+  containerFile2:
 ...
 ```
 
@@ -59,18 +67,7 @@ Initialize a `yard.yaml` file from a local template.
     yard init . -t python
     ```
 #### Remote Template
-Initialize a `yard.yaml` file from a remote template.
-
-1. At some point add the templates found in a remote repository.
-
-    Save all templates repository.
-    ```bash
-    yard save <REPO_URL_WITH_HASH>
-    ```
-2. Initialize the `yard.yaml` file.
-    ```bash
-    yard init . -t <USER>.<REPO>.python
-    ```
+See [Creating A Template Repository](#creating-a-template-repository)
 
 ### List Templates
 
@@ -85,24 +82,14 @@ yard delete -t <NAME>
 ```
 
 ## Creating A Template Repository
-Template repositories are used to save pre-configured `yard.yaml` files
-A valid template repository contains a top level `yard-repo.yaml` file,
-which contains the paths to directories containing `yard.yaml` files.
-```yaml
-- path/to/dir1/
-- path/to/dir2/
+Template repositories are used to save pre-configured `yard.yaml` files.
 ```
-Which may correspond to
-```
-path/to/dir1/
-    yard.yaml # `<USER>.<REPO>.dir`
-    python.yaml # `<USER>.<REPO>.python`
-path/to/dir2/
-    yard.yaml # `<USER>.<REPO>.rust`
+yard.yaml # `<USER>.<REPO>`
+python.yard.yaml # `<USER>.<REPO>.python`
 ```
 Which are imported with
 ```bash
-yard save <REPO_URL_WITH_HASH>
+yard save <REPO_URL_WITH_HASH> -p <PATH>
 ```
 These then can be used to generate templates locally.
 ```bash
@@ -115,31 +102,31 @@ A module is defined by creating two files - `<MODULE_NAME>.Containerfile` and `<
 
 `<MODULE_NAME>.Containerfile` is the Tera template for the Containerfile part.
 
-todo example
+```Containerfile
+FROM {{ base_image }}
+
+COPY {{ app_source }} /app
+
+WORKDIR /app
+
+RUN pip install -r requirements.txt
+
+CMD ["python", "app.py"]
+```
+
+>Note: When using commands such as `COPY` in `<MODULE_NAME>.Containerfile`, `COPY` cannot reference any file above it's current directory.
 
 `<MODULE_NAME>.yaml` is mainly a list of arguments expected by the module
 ```yaml
 name: example_module
 description: "This is an example module"
 args:
-    - key1
-    - key2
+  - key1
+  - key2
 ```
 
 ## Creating A Module Repository
-Module repositories are used to save and load pre-configured modules. A module repository can be any git repo. The individual modules are referenced by the path.
-```yaml
-inputs:
-    name:
-        url:
-        ref:
-
-outputs:
-   containerFile:
-        name.path.to.module:
-            key1: value
-            key2: # env variable
-```
+Module repositories are used to save and load pre-configured modules. A module repository can be any git repo. See [`yard.yaml` Example Specification](#yardyaml-example-specification)
 
 ## Why Use Container Yard Over Nix Flakes
 
