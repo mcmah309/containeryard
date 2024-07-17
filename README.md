@@ -132,7 +132,9 @@ RUN pip install -r requirements.txt
 name: example_module
 description: "This is an example module"
 args:
-  - app_source
+  required:
+    - app_source
+  optional:
 ```
 
 ## Creating A Module Repository
