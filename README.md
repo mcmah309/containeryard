@@ -121,8 +121,8 @@ CMD ["python", "app.py"]
 name: example_module
 description: "This is an example module"
 args:
-  - key1
-  - key2
+  - base_image
+  - app_source
 ```
 
 ## Creating A Module Repository
