@@ -1,10 +1,7 @@
 use clap::{Parser, Subcommand};
 
-/// yard
-/// 
-/// yard is the cli tool for Container Yard - a declarative reusable decentralized approach for defining containers.
 #[derive(Parser)]
-#[clap(author = "Henry McMahon", version = "0.1.0", about = "A declarative reusable decentralized approach for defining containers", long_about = None)]
+#[clap(name = "yard", author = "Henry McMahon", version = "0.1.0", about = "A declarative reusable decentralized approach for defining containers", long_about = None)]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Commands,
