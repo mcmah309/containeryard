@@ -25,18 +25,22 @@ inputs:
 outputs:
   # Output Containerfile created from modules
   containerFile1:
+    # module1 from inputs
     module1:
-      templateVar1: value # use `value` for `templateVar1`
-      templateVar2: # use env variable for template variable `templateVar2`
+      # use `value` for `templateVar1`
+      templateVar1: value
+      # use env variable for template variable `templateVar2`
+      templateVar2:
+    # inline module
+    inline_module1: |
+      RUN echo hello
     module2:
-      ...
-    module3:
-      ...
-    module4:
-      ...
-  containerFile2:
     ...
+  containerFile2:
+  ...
 ```
+
+
 ## Building
 Building Containerfiles from a `yard.yaml` file is as simple as
 ```bash
@@ -109,9 +113,9 @@ yard init . -t <USER>.<REPO>.python
 
 ## Declaring a module
 
-A module is defined by creating two files - `<MODULE_NAME>.Containerfile` and `<MODULE_NAME>.yaml`.
+A module is defined by creating two files - `Containerfile` and `yard-module.yaml`.
 
-`<MODULE_NAME>.Containerfile` is the Tera template for the Containerfile part.
+`Containerfile` is the Tera template for the Containerfile part.
 
 ```Containerfile
 COPY {{ app_source }} /app
@@ -121,9 +125,9 @@ WORKDIR /app
 RUN pip install -r requirements.txt
 ```
 
->Note: When using commands such as `COPY` in `<MODULE_NAME>.Containerfile`, `COPY` cannot reference any file above it's current directory.
+>Note: When using commands such as `COPY` in `Containerfile`, `COPY` cannot reference any file above it's current directory.
 
-`<MODULE_NAME>.yaml` is mainly a list of arguments expected by the module
+`yard-module.yaml` is mainly a list of arguments expected by the module and any required files for commands like `Copy`.
 ```yaml
 name: example_module
 description: "This is an example module"
