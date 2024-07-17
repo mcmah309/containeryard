@@ -40,7 +40,7 @@ Container Yard allows using templates to easily setup projects.
 ### Initialization
 `yard.yaml` can be created with or without templates. You can create your own templates to get your projects up and running fast.
 
-#### No Template
+#### Default Template
 
 ```bash
 yard init .
@@ -55,7 +55,7 @@ Initialize a `yard.yaml` file from a local template.
     ```bash
     yard save .
     ```
-    Save the current `yard.yaml` file as a template with the specified name.
+    Or save the current `yard.yaml` file as a template with the specified name.
     ```bash
     yard save . -t python
     ```
@@ -89,8 +89,10 @@ python.yard.yaml # `<USER>.<REPO>.python`
 ```
 Which are imported with
 ```bash
-yard save <REPO_URL_WITH_HASH> -p <PATH>
+yard save --remote <REF> <REPO_URL> <PATH>
 ```
+`<PATH>` is optional.
+
 These then can be used to generate templates locally.
 ```bash
 yard init . -t <USER>.<REPO>.python
