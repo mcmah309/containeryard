@@ -33,6 +33,11 @@ outputs:
   containerFile2:
 ...
 ```
+## Building
+Building Containerfiles from a `yard.yaml` file is as simple as
+```bash
+yard build .
+```
 
 ## Templates
 Container Yard allows using templates to easily setup projects.
