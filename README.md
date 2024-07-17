@@ -3,7 +3,7 @@
 Container Yard is a declarative reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
 Container Yard introduces the concept of modules to Containerfiles. 
-A module is a Tera template for part of a Containerfile, which can be combined with other modules to create a Containerfile.
+A module is Tera template for part of a Containerfile representing some specific functionality. e.g. The [rust module](todo) defines rust's installation. Modules can be combined with other modules to create a Containerfile.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
 
@@ -14,8 +14,8 @@ inputs:
   paths:
     moduleName1: path/to/module
     moduleName2: path/to/module
-  remote:
-    # Modules found in a remote repo
+  # Modules found in a remote repos
+  remotes:
     - url: http://example.com
       ref: v1.0
       paths:
@@ -105,15 +105,11 @@ A module is defined by creating two files - `<MODULE_NAME>.Containerfile` and `<
 `<MODULE_NAME>.Containerfile` is the Tera template for the Containerfile part.
 
 ```Containerfile
-FROM {{ base_image }}
-
 COPY {{ app_source }} /app
 
 WORKDIR /app
 
 RUN pip install -r requirements.txt
-
-CMD ["python", "app.py"]
 ```
 
 >Note: When using commands such as `COPY` in `<MODULE_NAME>.Containerfile`, `COPY` cannot reference any file above it's current directory.
@@ -123,7 +119,6 @@ CMD ["python", "app.py"]
 name: example_module
 description: "This is an example module"
 args:
-  - base_image
   - app_source
 ```
 
@@ -133,3 +128,10 @@ Module repositories are used to save and load pre-configured modules. A module r
 ## Why Use Container Yard Over Nix Flakes
 
 Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different packages managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
+
+## Module Repositories
+
+- <https://github.com/mcmah309/containeryard_module_repository.git> - The Official Module Repository.
+
+**\*Feel free to create a PR to add your own!\***
+
