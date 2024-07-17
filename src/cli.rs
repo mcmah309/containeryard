@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -13,13 +15,13 @@ pub enum Commands {
     Build {
         /// Path to the `yard.yaml` file
         #[clap(default_value = ".")]
-        path: String,
+        path: PathBuf,
     },
     /// Initialize a `yard.yaml` file
     Init {
         /// Path to initialize the `yard.yaml` file
         #[clap(default_value = ".")]
-        path: String,
+        path: PathBuf,
         /// Template to use for initialization
         #[clap(short, long)]
         template: Option<String>,
@@ -28,7 +30,7 @@ pub enum Commands {
     Save {
         /// Path to the `yard.yaml` file
         #[clap(default_value = ".")]
-        path: String,
+        path: PathBuf,
         /// Name of the template to save as
         #[clap(short, long)]
         template: Option<String>,

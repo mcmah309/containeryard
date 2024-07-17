@@ -11,18 +11,21 @@ fn main() {
 
     match cli.command {
         Commands::Build { path } => {
-            println!("Building Containerfiles from {}", path);
+            // println!("Building Containerfiles from {}", path);
         },
         Commands::Init { path, template } => {
-            match template {
-                Some(t) => println!("Initializing {} with template {}", path, t),
-                None => println!("Initializing {}", path),
-            }
+            // match template {
+            //     Some(t) => println!("Initializing {} with template {}", path, t),
+            //     None => println!("Initializing {}", path),
+            // }
         },
         Commands::Save { path, template , remote} => {
             let template_name = template.unwrap_or_else(|| {
-                let path = std::env::current_dir().expect("Failed to get current directory");
-                path.parent().map(|e| e.file_name()).flatten().expect("Failed to get current directory name").to_str().expect("Failed to convert to string").to_string()
+                if path.as_path() == Path::new(".") {
+                    let path = std::env::current_dir().expect("Failed to get current directory");
+                    return path.parent().expect("Failed to get parent directory").file_name().unwrap().to_str().unwrap().to_string()
+                }
+                return path.file_name().unwrap().to_str().unwrap().to_string()
             });
             if remote.is_empty() {
                 save_local_yard_file_as_template(path, template_name);
