@@ -32,8 +32,8 @@ pub enum Commands {
         /// Name of the template to save as
         #[clap(short, long)]
         template: Option<String>,
-        /// Remote repository. Format `<REF> <REPO_URL>`.
-        #[clap(short, long, value_parser = validate_remote)]
+        /// Remote repository.
+        #[clap(short, long, num_args = 2, value_names = ["REF", "REPO_URL"])]
         remote: Vec<String>,
     },
     /// List
@@ -48,12 +48,4 @@ pub enum Commands {
         #[clap(short, long)]
         template: String,
     },
-}
-
-fn validate_remote(val: &str) -> Result<String, String> {
-    let parts: Vec<&str> = val.split_whitespace().collect();
-    if parts.len() != 2 {
-        return Err(String::from("Remote must be exactly 2 elements: <REF> <REPO_URL>"));
-    }
-    Ok(String::from(val))
 }

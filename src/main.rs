@@ -49,10 +49,12 @@ fn main() {
 
 fn save_local_yard_file_as_template<P: AsRef<Path>>(path: P, template_name: String) {
     let path = path.as_ref();
+    unimplemented!();
 }
 
 fn save_remote_yard_file_as_template<P: AsRef<Path>>(path: P, template_name: String, reference: String, url: String) {
     let path = path.as_ref();
+    unimplemented!();
 }
 
 // fn main2() -> Result<(), Box<dyn std::error::Error>> {
