@@ -146,7 +146,6 @@ Container Yard is also built on familiar developer tools - Containerfiles and Te
 
 ## Module Repositories
 
-- <https://github.com/mcmah309/containeryard_repository.git> - The Official Module Repository.
-
+- <https://github.com/mcmah309/containeryard_repository.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
 **\*Feel free to create a PR to add your own!\***
 
