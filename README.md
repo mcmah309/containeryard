@@ -69,7 +69,7 @@ Initialize a `yard.yaml` file from a local template.
     yard save . -t python
     ```
 
-2. At a later point initialize the `yard.yaml` file.
+2. At a later point initialize a `yard.yaml` file for a new project.
 
     Create a `yard.yaml` file from the python template.
     ```bash
