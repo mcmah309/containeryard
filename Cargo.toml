@@ -4,5 +4,11 @@ description = "Cli tool for creating containers"
 license = "Apache-2.0"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/mcmah309/containeryard"
 
 [dependencies]
+clap = {version = "4.5", features=["derive"]}
+toml = "0.8"
+serde_json = "1"
+serde = {version = "1", features=["derive"]}
+gix = "0.63.0"
