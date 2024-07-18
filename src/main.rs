@@ -9,6 +9,7 @@ mod template;
 
 use std::{env, path::Path, process::exit};
 
+use build::build;
 use clap::Parser;
 use cli::{Cli, Commands, TemplateCommands};
 use common::UserMessageError;
@@ -18,7 +19,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
-        Commands::Build { path } => Ok(()),
+        Commands::Build { path } => build(&path),
         Commands::Init { path, template } => {
             // todo check if template exists. If so use that. Otherwise use default
             Ok(())
