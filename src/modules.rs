@@ -9,12 +9,12 @@ use jsonschema::{Draft, JSONSchema};
 
 use crate::common::UserMessageError;
 
-struct Module {
+pub struct Module {
     pub module: serde_yaml::Value,
     pub containerfile_path: PathBuf,
 }
 
-fn resolve_modules(paths: Vec<(&Path, &Path)>) -> anyhow::Result<Vec<Module>> {
+pub fn resolve_modules(paths: Vec<(&Path, &Path)>) -> anyhow::Result<Vec<Module>> {
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
     let yard_module_schema: serde_json::Value = serde_json::from_str(yard_module_schema)
         .expect("yard-module-schema.json is not valid json");

@@ -1,9 +1,15 @@
+mod cli;
+mod common;
+mod modules;
+mod validate;
+
 use std::path::Path;
 
 use clap::Parser;
+use cli::{Cli, Commands};
+use common::UserMessageError;
+use modules::resolve_modules;
 use gix::{Remote, Repository};
-
-mod lib;
 
 fn main() {
     let cli = Cli::parse();
@@ -46,7 +52,9 @@ fn main() {
                 let ref_ = remote[0].to_string();
                 let url = remote[1].to_string();
                 save_remote_yard_file_as_template(&path, template_name, ref_, url);
+                
             }
+            resolve_modules(Vec::new()).unwrap();
             Ok(())
         }
         Commands::List { templates } => {
