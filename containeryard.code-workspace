@@ -1,7 +1,8 @@
 {
   "settings": {
     "yaml.schemas": {
-      "./yard-schema.json": "yard.yaml"
+      "./src/schemas/yard-schema.json": "yard.yaml",
+      "./src/schemas/yard-module-schema.json": "yard-module.yaml"
     },
   },
   "folders": [
