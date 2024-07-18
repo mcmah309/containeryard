@@ -11,40 +11,45 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Build Containerfiles from a `yard.yaml` file
+    /// Build Containerfiles from a `yard.yaml` file.
     Build {
-        /// Path to the `yard.yaml` file
+        /// Path to the `yard.yaml` file.
         #[clap(default_value = ".")]
         path: PathBuf,
     },
-    /// Initialize a `yard.yaml` file
+    /// Initialize a `yard.yaml` file.
     Init {
-        /// Path to initialize the `yard.yaml` file
+        /// Path to initialize the `yard.yaml` file.
         #[clap(default_value = ".")]
         path: PathBuf,
         /// Template to use for initialization
         #[clap(short, long)]
         template: Option<String>,
     },
-    /// Save the current `yard.yaml` file as a template
+    /// Template commands.
+    Template {
+        #[clap(subcommand)]
+        command: TemplateCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TemplateCommands {
+    /// Save a `yard.yaml` file as a template.
     Save {
-        /// Path to the `yard.yaml` file
+        /// Path to the `yard.yaml` file.
         #[clap(default_value = ".")]
         path: PathBuf,
-        /// Name of the template to save as
+        /// Name to save as.
         #[clap(short, long)]
         template: Option<String>,
-        /// Remote repository.
+        /// Remote repository to retrieve from.
         #[clap(short, long, num_args = 2, value_names = ["REF", "REPO_URL"])]
         remote: Vec<String>,
     },
-    /// List
-    List {
-        /// List saved templates
-        #[clap(short, long,)] // conflicts_with = "templates", requires = "templates"
-        templates: bool,
-    },
-    /// Delete a template
+    /// List templates.
+    List,
+    /// Delete a template.
     Delete {
         /// Name of the template to delete
         #[clap(short, long)]

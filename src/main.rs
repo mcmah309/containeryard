@@ -6,68 +6,69 @@ mod validate;
 use std::path::Path;
 
 use clap::Parser;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, TemplateCommands};
 use common::UserMessageError;
-use modules::resolve_modules;
 use gix::{Remote, Repository};
+use modules::resolve_modules;
 
 fn main() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
         Commands::Build { path } => {
-            // println!("Building Containerfiles from {}", path);
+            // todo parse yard.yaml and validate that all referenced modules are declared
+            // todo download any missing remote modules and resolve paths to pass to below
+            // todo resolve all modules (todo validate all required args are declared in yard.yaml)
+            // todo resolve all args (env vars)
+            // todo pass applied args to each template and collect
+            // todo write template file
             Ok(())
         }
         Commands::Init { path, template } => {
-            // match template {
-            //     Some(t) => println!("Initializing {} with template {}", path, t),
-            //     None => println!("Initializing {}", path),
-            // }
+            // todo check if template exists. If so use that. Otherwise use default
             Ok(())
         }
-        Commands::Save {
-            path,
-            template,
-            remote,
-        } => {
-            let template_name = template.unwrap_or_else(|| {
-                if path.as_path() == Path::new(".") {
-                    let path = std::env::current_dir().expect("Failed to get current directory");
-                    return path
-                        .parent()
-                        .expect("Failed to get parent directory")
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string();
+        Commands::Template { command } => {
+            match command {
+                TemplateCommands::Save {
+                    path,
+                    template,
+                    remote,
+                } => {
+                    let template_name = template.unwrap_or_else(|| {
+                        if path.as_path() == Path::new(".") {
+                            let path =
+                                std::env::current_dir().expect("Failed to get current directory");
+                            return path
+                                .parent()
+                                .expect("Failed to get parent directory")
+                                .file_name()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string();
+                        }
+                        return path.file_name().unwrap().to_str().unwrap().to_string();
+                    });
+                    if remote.is_empty() {
+                        save_local_yard_file_as_template(&path, template_name);
+                    } else {
+                        assert!(remote.len() == 2);
+                        let ref_ = remote[0].to_string();
+                        let url = remote[1].to_string();
+                        save_remote_yard_file_as_template(&path, template_name, ref_, url);
+                    }
+                    Ok(())
                 }
-                return path.file_name().unwrap().to_str().unwrap().to_string();
-            });
-            if remote.is_empty() {
-                save_local_yard_file_as_template(&path, template_name);
-            } else {
-                assert!(remote.len() == 2);
-                let ref_ = remote[0].to_string();
-                let url = remote[1].to_string();
-                save_remote_yard_file_as_template(&path, template_name, ref_, url);
-                
+                TemplateCommands::List => {
+                    // todo list templates
+                    Ok(())
+                }
+                TemplateCommands::Delete { template } => {
+                    // todo delete template with name
+                    Ok(())
+                }
             }
-            resolve_modules(Vec::new()).unwrap();
-            Ok(())
-        }
-        Commands::List { templates } => {
-            // Handle listing available templates
-            if templates {
-                println!("Listing templates");
-            }
-            Ok(())
-        }
-        Commands::Delete { template } => {
-            // Handle deleting a template
-            println!("Deleting template {}", template);
-            Ok(())
         }
     };
     if let Err(error) = result {
