@@ -1,0 +1,12 @@
+{
+  "settings": {
+    "yaml.schemas": {
+      "./yard-schema.json": "yard.yaml"
+    },
+  },
+  "folders": [
+    {
+      "path": "."
+    },
+  ]
+}
