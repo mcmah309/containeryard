@@ -113,7 +113,7 @@ yard init . -t <USER>.<REPO>.python
 
 ## Declaring a module
 
-A module is defined by creating two files - `Containerfile` and `module.yaml`.
+A module is defined by creating two files - `Containerfile` and `yard-module.yaml`.
 
 `Containerfile` is the Tera template for the Containerfile part.
 
@@ -127,7 +127,7 @@ RUN pip install -r requirements.txt
 
 >Note: When using commands such as `COPY` in `Containerfile`, `COPY` cannot reference any file above it's current directory.
 
-`module.yaml` is mainly a list of arguments expected by the module.
+`yard-module.yaml` is mainly a list of arguments expected by the module.
 ```yaml
 description: "This is a modules description"
 args:

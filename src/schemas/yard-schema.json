@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Container Configuration Schema",
+  "title": "yard.yaml Schema",
   "type": "object",
   "properties": {
     "inputs": {

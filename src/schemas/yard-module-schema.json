@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Module",
+    "title": "yard-module.yaml Schema",
     "type": "object",
     "properties": {
       "description": {
