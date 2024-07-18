@@ -17,7 +17,7 @@ inputs:
   # Modules found in a remote repos
   remotes:
     - url: http://example.com
-      ref: v1.0
+      commit: 235f339e1cae6421651bb3ab1b5fcac512882c19
       paths:
         module3: path/to/module
         module4: path/to/module

@@ -23,7 +23,7 @@
                 "type": "string",
                 "format": "uri"
               },
-              "ref": {
+              "commit": {
                 "type": "string"
               },
               "paths": {
@@ -35,7 +35,7 @@
             },
             "required": [
               "url",
-              "ref",
+              "commit",
               "paths"
             ]
           }
