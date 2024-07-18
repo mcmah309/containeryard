@@ -1,29 +1,24 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+// todo remove above
+
+mod build;
 mod cli;
 mod common;
-mod modules;
-mod validate;
+mod template;
 
-use std::path::Path;
+use std::{env, path::Path, process::exit};
 
 use clap::Parser;
 use cli::{Cli, Commands, TemplateCommands};
 use common::UserMessageError;
-use gix::{Remote, Repository};
-use modules::resolve_modules;
+use template::{save_local_yard_file_as_template, save_remote_yard_file_as_template};
 
 fn main() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
-        Commands::Build { path } => {
-            // todo parse yard.yaml and validate that all referenced modules are declared
-            // todo download any missing remote modules and resolve paths to pass to below
-            // todo resolve all modules (todo validate all required args are declared in yard.yaml)
-            // todo resolve all args (env vars)
-            // todo pass applied args to each template and collect
-            // todo write template file
-            Ok(())
-        }
+        Commands::Build { path } => Ok(()),
         Commands::Init { path, template } => {
             // todo check if template exists. If so use that. Otherwise use default
             Ok(())
@@ -72,34 +67,18 @@ fn main() {
         }
     };
     if let Err(error) = result {
-        for err in error.chain() {
-            if let Some(user_message_error) = err.downcast_ref::<UserMessageError>() {
-                eprint!("{}", user_message_error.message);
+        let is_debug = env::var("CONTAINERYARD_DEBUG")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        if is_debug {
+            eprint!("{}", error);
+        } else {
+            for err in error.chain() {
+                if let Some(user_message_error) = err.downcast_ref::<UserMessageError>() {
+                    eprint!("{}", user_message_error.message);
+                }
             }
         }
+        exit(1);
     };
 }
-
-fn save_local_yard_file_as_template(path: &Path, template_name: String) {
-    unimplemented!();
-}
-
-fn save_remote_yard_file_as_template(
-    path: &Path,
-    template_name: String,
-    reference: String,
-    url: String,
-) {
-    unimplemented!();
-}
-
-// fn main2() -> Result<(), Box<dyn std::error::Error>> {
-//     let url = "https://github.com/your/repo.git";
-//     let repo_path = "/path/to/local/repo";
-
-//     let repo = gix::prepare_clone(url, path);
-
-//     println!("Repository cloned to: {:?}", repo.work_dir());
-
-//     Ok(())
-// }
