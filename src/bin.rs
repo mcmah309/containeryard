@@ -1,14 +1,9 @@
 use std::path::Path;
 
 use clap::Parser;
-use cli::{Cli, Commands};
-use common::UserMessageError;
 use gix::{Remote, Repository};
 
-mod cli;
-mod common;
-mod modules;
-mod validate;
+mod lib;
 
 fn main() {
     let cli = Cli::parse();
