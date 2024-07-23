@@ -1,0 +1,17 @@
+inputs:
+  paths:
+    finalizer: local_modules/finalizer
+  remotes:
+    - url: https://github.com/mcmah309/containeryard_repository
+      commit: 15902ce2c1a48b662cecdcdfde4868fb70f62554
+      paths:
+        base: bases/ubuntu/base
+        git_config: independent/git_config
+
+outputs:
+  Containerfile:
+    base:
+      version: "24.04"
+    inline1: RUN apt install git
+    finalizer:
+

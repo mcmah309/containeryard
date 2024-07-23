@@ -24,8 +24,8 @@ pub const CONTAINERFILE_NAME: &str = "Containerfile";
 pub async fn build(path: &Path) -> anyhow::Result<()> {
     let parsed_yard_file = parse_yard_yaml(path)?;
     let resolved_yard_file = resolve_yard_yaml(parsed_yard_file).await?;
-    let containerfile = apply_templates(resolved_yard_file)?;
-    fs::write("Containerfile", containerfile)?;
+    let containerfile = apply_templates(resolved_yard_file)?; // todo this should apply multiple
+    fs::write("Containerfile", containerfile)?; // todo allow this path to be configured cli
     Ok(())
 }
 
@@ -257,8 +257,9 @@ fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         .compile(&yard_schema)
         .expect("yard-schema.json is not a valid json schema");
 
-    let yard_yaml_file = File::open(path.join(YARD_YAML_FILE_NAME))
-        .context(formatcp!("Could not open '{}'.", YARD_YAML_FILE_NAME))?;
+    let yard_yaml_file = File::open(path.join(YARD_YAML_FILE_NAME)).context(
+        UserMessageError::new(formatcp!("Could not open '{}'.", YARD_YAML_FILE_NAME).to_string()),
+    )?;
     let yard_yaml: serde_yaml::Value = serde_yaml::from_reader(BufReader::new(yard_yaml_file))
         .context(formatcp!("{} is not valid yaml.", YARD_YAML_FILE_NAME))?;
     validate_against_schema(&compiled_schema, &yard_yaml, &path.display().to_string())?;

@@ -15,10 +15,23 @@ use clap::Parser;
 use cli::{Cli, Commands, TemplateCommands};
 use common::UserMessageError;
 use template::{save_local_yard_file_as_template, save_remote_yard_file_as_template};
-use tracing::error;
+use tracing::{error, Level};
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
+    let is_debug = env::var("CONTAINERYARD_DEBUG")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    if is_debug {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::TRACE)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+    }
+
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
@@ -71,9 +84,6 @@ async fn main() {
         }
     };
     if let Err(error) = result {
-        let is_debug = env::var("CONTAINERYARD_DEBUG")
-            .map(|v| v == "true")
-            .unwrap_or(false);
         if is_debug {
             eprintln!("{}", error);
         } else {
@@ -88,8 +98,8 @@ async fn main() {
                 error!("There should always be a user message");
                 eprintln!("For more info, try again with environment variable `CONTAINERYARD_DEBUG=true`.")
             }
-            eprintln!("Oops something went wrong.");
         }
+        eprintln!("Oops something went wrong.");
         exit(1);
     };
 }
