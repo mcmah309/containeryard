@@ -134,7 +134,7 @@ struct IntermediateUseInputModule {
 
 /// Builder for when constructing all the values needed to operate on the template
 #[derive(Debug, Clone)]
-struct ContainerfileTemplatePartBuilder {
+struct ModuleBuilder {
     containerfile: String,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
@@ -143,8 +143,8 @@ struct ContainerfileTemplatePartBuilder {
     source_info: SourceInfoKind,
 }
 
-impl ContainerfileTemplatePartBuilder {
-    fn build(self) -> anyhow::Result<ContainerfileTemplatePart> {
+impl ModuleBuilder {
+    fn build(self) -> anyhow::Result<Module> {
         for var in self.required_template_values.iter() {
             if !self.provided_template_values.contains_key(var) {
                 bail!(UserMessageError::new(format!(
@@ -165,7 +165,7 @@ impl ContainerfileTemplatePartBuilder {
                 )));
             }
         }
-        Ok(ContainerfileTemplatePart {
+        Ok(Module {
             containerfile: self.containerfile,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
@@ -176,15 +176,15 @@ impl ContainerfileTemplatePartBuilder {
 // Resolved yard.yaml representation
 //************************************************************************//
 
-/// All containerfile templates. Ready to apply
-struct ContainerfilesTemplates {
+/// All containerfile and their resolved modules. Ready to apply
+struct Containerfiles {
     /// Containerfile names to included modules
-    container_files: HashMap<String, Vec<ContainerfileTemplatePart>>,
+    name_to_module: HashMap<String, Vec<Module>>,
 }
 
-/// Containerfile file and yard-module.yaml file combined
+/// The template Containerfile file and yard-module.yaml file combined. Ready to apply
 #[derive(Debug, Clone)]
-struct ContainerfileTemplatePart {
+struct Module {
     containerfile: String,
     provided_template_values: HashMap<String, String>,
     /// source info for better errors
@@ -277,7 +277,13 @@ fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
     let yard_yaml: serde_yaml::Value = serde_yaml::from_reader(BufReader::new(yard_yaml_file))
         .context(formatcp!("{} is not valid yaml.", YARD_YAML_FILE_NAME))?;
     validate_against_schema(&compiled_schema, &yard_yaml, &path.display().to_string())?;
-    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml)?;
+    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).context(UserMessageError::new(
+        formatcp!(
+            "Was able to serialize {}, but was unable to convert to internal expected model.",
+            YARD_YAML_FILE_NAME
+        )
+        .to_string(),
+    ))?;
 
     let mut input_remotes: Vec<IntermediateRemote> = Vec::new();
     if let Some(remotes) = yard_yaml.inputs.remotes {
@@ -325,9 +331,7 @@ fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
 }
 
 /// resolve and validate fields in the yard.yaml file
-async fn resolve_yard_yaml(
-    yard_yaml: IntermediateYardFile,
-) -> anyhow::Result<ContainerfilesTemplates> {
+async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Containerfiles> {
     let IntermediateYardFile {
         input_remotes,
         input_paths,
@@ -360,17 +364,20 @@ async fn resolve_yard_yaml(
             )))
         }
     }
-    download_remotes(input_remotes, &mut module_to_files).await?;
-    let modules = resolve_modules(module_to_files)?;
-    let mut containerfiles_to_parts: HashMap<String, Vec<ContainerfileTemplatePart>> =
-        HashMap::new();
+    download_remotes(input_remotes, &mut module_to_files)
+        .await
+        .context(UserMessageError::new(
+            "Failed to download some remotes.".to_string(),
+        ))?;
+    let modules = resolve_modules(module_to_files).context("Could not resolve modules.")?;
+    let mut containerfiles_to_parts: HashMap<String, Vec<Module>> = HashMap::new();
     for (container_file_name, module_declarations) in output_container_files {
-        let mut modules_for_container_file: Vec<ContainerfileTemplatePart> = Vec::new();
+        let mut modules_for_container_file: Vec<Module> = Vec::new();
         for module_declaration in module_declarations {
             match module_declaration {
                 IntermediateUseModule::Inline(inline) => {
                     modules_for_container_file.push(
-                        ContainerfileTemplatePartBuilder {
+                        ModuleBuilder {
                             containerfile: inline.value,
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
@@ -399,8 +406,8 @@ async fn resolve_yard_yaml(
         }
         containerfiles_to_parts.insert(container_file_name, modules_for_container_file);
     }
-    Ok(ContainerfilesTemplates {
-        container_files: containerfiles_to_parts,
+    Ok(Containerfiles {
+        name_to_module: containerfiles_to_parts,
     })
 }
 
@@ -410,7 +417,17 @@ async fn download_remotes(
 ) -> anyhow::Result<()> {
     for remote in remotes {
         let git_provider = git_provider_from_url(&remote.url)?;
-        let module_to_files = git_provider.get_module_files(&remote).await?;
+        let module_to_files =
+            git_provider
+                .get_module_files(&remote)
+                .await
+                .context(UserMessageError::new(
+                    format!(
+                        "Could not get module files from remote:\nRepo: {}\nCommit: {}",
+                        remote.url, remote.commit
+                    )
+                    .to_string(),
+                ))?;
         all_module_to_files.extend(module_to_files);
     }
     Ok(())
@@ -423,7 +440,7 @@ fn download_remote(url: &str, commit: &str) -> PathBuf {
 /// validates and builds all the referenced modules from the resolved paths.
 fn resolve_modules(
     name_to_modulefiles: HashMap<String, ModuleFiles>,
-) -> anyhow::Result<HashMap<String, ContainerfileTemplatePartBuilder>> {
+) -> anyhow::Result<HashMap<String, ModuleBuilder>> {
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
     let yard_module_schema: serde_json::Value = serde_json::from_str(yard_module_schema)
         .expect("yard-module-schema.json is not valid json");
@@ -435,20 +452,25 @@ fn resolve_modules(
         validate_against_schema(&compiled_schema, yaml, source_name_or_path)
     };
 
-    let mut modules: HashMap<String, ContainerfileTemplatePartBuilder> = HashMap::new();
+    let mut modules: HashMap<String, ModuleBuilder> = HashMap::new();
     for (name, module_files) in name_to_modulefiles {
-        let module = create_module(module_files, validate_schema_fn)?;
+        let module = create_module_builder(&module_files, validate_schema_fn).context(
+            UserMessageError::new(format!(
+                "Failed to validate and create template builder for:\n{}",
+                module_files.source_info.source_location()
+            )),
+        )?;
         modules.insert(name, module);
     }
     return Ok(modules);
 }
 
 /// Validates and creates the internal module representation based off the path.
-fn create_module<F: Fn(&serde_yaml::Value, &str) -> anyhow::Result<()>>(
-    module_files: ModuleFiles,
+fn create_module_builder<F: Fn(&serde_yaml::Value, &str) -> anyhow::Result<()>>(
+    module_files: &ModuleFiles,
     validate_schema_fn: F,
-) -> anyhow::Result<ContainerfileTemplatePartBuilder> {
-    let module_yaml_path = module_files.module_file;
+) -> anyhow::Result<ModuleBuilder> {
+    let module_yaml_path = &module_files.module_file;
     if !module_yaml_path.is_file() {
         bail!(UserMessageError::new(
             formatcp!("{} does not exist.", MODULE_YAML_FILE_NAME).to_string()
@@ -460,26 +482,34 @@ fn create_module<F: Fn(&serde_yaml::Value, &str) -> anyhow::Result<()>>(
         serde_yaml::from_reader(BufReader::new(module_yaml_file))
             .context("yard-module-schema.json is not valid json.")?;
 
-    validate_schema_fn(&yard_module_yaml, &module_yaml_path.display().to_string())?;
+    validate_schema_fn(&yard_module_yaml, &module_yaml_path.display().to_string())
+        .context("Schema validation failed.")?;
 
-    let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml)?;
+    let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(format!(
+        "Was able to serialize {}, but was unable to convert to internal expected model.",
+        module_yaml_path.display()
+    ))?;
     let args = raw_module.args.unwrap_or_default();
     let required_template_values = args.required.unwrap_or(Vec::new()).into_iter().collect();
     let optional_template_values = args.optional.unwrap_or(Vec::new()).into_iter().collect();
 
-    let containerfile_path = module_files.containerfile;
+    let containerfile_path = &module_files.containerfile;
     if !containerfile_path.is_file() {
         bail!(UserMessageError::new(
             "'Containerfile' does not exist in".to_string()
         ))
     }
-    let containerfile = fs::read_to_string(containerfile_path)?;
-    Ok(ContainerfileTemplatePartBuilder {
+    let containerfile = fs::read_to_string(&containerfile_path).context(format!(
+        "Could not read 'Containerfile' from {}",
+        containerfile_path.display()
+    ))?;
+
+    Ok(ModuleBuilder {
         containerfile,
         required_template_values,
         optional_template_values,
         provided_template_values: HashMap::new(),
-        source_info: module_files.source_info,
+        source_info: module_files.source_info.clone(),
     })
 }
 
@@ -518,7 +548,7 @@ fn validate_against_schema(
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templates(yard: ContainerfilesTemplates) -> anyhow::Result<Outputs> {
+fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(vec![]);
@@ -526,7 +556,7 @@ fn apply_templates(yard: ContainerfilesTemplates) -> anyhow::Result<Outputs> {
 
     let mut outputs = Vec::new();
     let mut container_file_resolved_parts = Vec::new();
-    for (containerfile_name, included_modules) in yard.container_files {
+    for (containerfile_name, included_modules) in yard.name_to_module {
         for included_module in included_modules {
             let mut context = tera::Context::new();
             for (var, val) in included_module.provided_template_values {
