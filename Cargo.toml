@@ -18,5 +18,11 @@ serde = {version = "1", features=["derive"]}
 serde_json = "1"
 serde_yaml = "0.9"
 jsonschema = "0.18"
-
-gix = "0.63.0"
+dirs = "5"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3"
+regex = "1"
+enum_dispatch = "0.3"
+#bumpalo = "3"

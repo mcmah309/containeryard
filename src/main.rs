@@ -5,6 +5,7 @@
 mod build;
 mod cli;
 mod common;
+mod git;
 mod template;
 
 use std::{env, path::Path, process::exit};
@@ -14,12 +15,14 @@ use clap::Parser;
 use cli::{Cli, Commands, TemplateCommands};
 use common::UserMessageError;
 use template::{save_local_yard_file_as_template, save_remote_yard_file_as_template};
+use tracing::error;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
-        Commands::Build { path } => build(&path),
+        Commands::Build { path } => build(&path).await,
         Commands::Init { path, template } => {
             // todo check if template exists. If so use that. Otherwise use default
             Ok(())
@@ -72,13 +75,20 @@ fn main() {
             .map(|v| v == "true")
             .unwrap_or(false);
         if is_debug {
-            eprint!("{}", error);
+            eprintln!("{}", error);
         } else {
+            let mut user_error_message_count = 0;
             for err in error.chain() {
                 if let Some(user_message_error) = err.downcast_ref::<UserMessageError>() {
-                    eprint!("{}", user_message_error.message);
+                    eprintln!("{}", user_message_error.message);
+                    user_error_message_count += 1;
                 }
             }
+            if user_error_message_count == 0 {
+                error!("There should always be a user message");
+                eprintln!("For more info, try again with environment variable `CONTAINERYARD_DEBUG=true`.")
+            }
+            eprintln!("Oops something went wrong.");
         }
         exit(1);
     };

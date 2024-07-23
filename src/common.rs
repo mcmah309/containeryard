@@ -1,6 +1,5 @@
-
 pub struct UserMessageError {
-    pub message: String
+    pub message: String,
 }
 
 impl UserMessageError {
