@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
 
 use anyhow::bail;
 use regex::Regex;
@@ -23,9 +23,16 @@ pub struct Github {
 impl Github {
     pub fn new() -> Self {
         Github {
-            web_request_client: Client::new(), // todo only create one client ever
+            web_request_client: get_client(),
         }
     }
+}
+
+fn get_client() -> Client {
+    static CLIENT: LazyLock<Client> = LazyLock::new(|| {
+        Client::new()
+    });
+    CLIENT.clone()
 }
 
 impl GitProvider for Github {
