@@ -11,6 +11,7 @@ use const_format::formatcp;
 use jsonschema::{Draft, JSONSchema};
 use serde::{Deserialize, Serialize};
 use tera::Tera;
+use tracing_subscriber::fmt::format;
 
 use crate::{
     common::UserMessageError,
@@ -23,22 +24,24 @@ pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
 pub async fn build(path: &Path) -> anyhow::Result<()> {
     let parsed_yard_file = parse_yard_yaml(path).context(UserMessageError::new(
-        "Could not parse yard.yaml file".to_string(),
+        formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME).to_string(),
     ))?;
-    let resolved_yard_file =
-        resolve_yard_yaml(parsed_yard_file)
-            .await
-            .context(UserMessageError::new(
-                "Could not resolve yard.yaml file".to_string(),
-            ))?;
-    let outputs = apply_templates(resolved_yard_file).context(UserMessageError::new(
-        "Could not apply templates".to_string(),
-    ))?;
+    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file).await.with_context(|| {
+        UserMessageError::new(
+            formatcp!(
+                "Could not resolve all the fields in the parsed '{}' file",
+                YARD_YAML_FILE_NAME
+            )
+            .to_string(),
+        )
+    })?;
+    let outputs = apply_templates(resolved_yard_file)
+        .with_context(|| UserMessageError::new("Could not apply templates".to_string()))?;
     for (file_name, content) in outputs {
         let file_path = path.join(&file_name);
-        fs::write(&file_path, content).context(UserMessageError::new(
-            format!("Could not write to '{}'.", &file_name).to_string(),
-        ))?;
+        fs::write(&file_path, content).with_context(|| {
+            UserMessageError::new(format!("Could not write to '{}'.", &file_name).to_string())
+        })?;
     }
     Ok(())
 }
@@ -198,7 +201,7 @@ pub struct LocalModuleInfo {
 }
 
 impl SourceInfo for LocalModuleInfo {
-    fn source_location(self) -> String {
+    fn source_location(&self) -> String {
         format!("Local path: {}", self.path)
     }
 }
@@ -212,7 +215,7 @@ pub struct RemoteModuleInfo {
 }
 
 impl SourceInfo for RemoteModuleInfo {
-    fn source_location(self) -> String {
+    fn source_location(&self) -> String {
         format!(
             "Repo: {}\nCommit: {}\nRemote path: {}",
             self.url, self.commit, self.path
@@ -226,13 +229,13 @@ pub struct InlineModuleInfo {
 }
 
 impl SourceInfo for InlineModuleInfo {
-    fn source_location(self) -> String {
+    fn source_location(&self) -> String {
         format!("Inline module: {}", self.name)
     }
 }
 
 trait SourceInfo {
-    fn source_location(self) -> String;
+    fn source_location(&self) -> String;
 }
 
 /// Info about where data came from.
@@ -244,7 +247,7 @@ pub enum SourceInfoKind {
 }
 
 impl SourceInfo for SourceInfoKind {
-    fn source_location(self) -> String {
+    fn source_location(&self) -> String {
         match self {
             SourceInfoKind::LocalModuleInfo(info) => info.source_location(),
             SourceInfoKind::RemoteModuleInfo(info) => info.source_location(),
@@ -366,9 +369,7 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
     }
     download_remotes(input_remotes, &mut module_to_files)
         .await
-        .context(UserMessageError::new(
-            "Failed to download some remotes.".to_string(),
-        ))?;
+        .with_context(|| UserMessageError::new("Failed to download some remotes.".to_string()))?;
     let modules = resolve_modules(module_to_files).context("Could not resolve modules.")?;
     let mut containerfiles_to_parts: HashMap<String, Vec<Module>> = HashMap::new();
     for (container_file_name, module_declarations) in output_container_files {
@@ -417,17 +418,7 @@ async fn download_remotes(
 ) -> anyhow::Result<()> {
     for remote in remotes {
         let git_provider = git_provider_from_url(&remote.url)?;
-        let module_to_files =
-            git_provider
-                .get_module_files(&remote)
-                .await
-                .context(UserMessageError::new(
-                    format!(
-                        "Could not get module files from remote:\nRepo: {}\nCommit: {}",
-                        remote.url, remote.commit
-                    )
-                    .to_string(),
-                ))?;
+        let module_to_files = git_provider.get_module_files(&remote).await?;
         all_module_to_files.extend(module_to_files);
     }
     Ok(())
@@ -454,12 +445,10 @@ fn resolve_modules(
 
     let mut modules: HashMap<String, ModuleBuilder> = HashMap::new();
     for (name, module_files) in name_to_modulefiles {
-        let module = create_module_builder(&module_files, validate_schema_fn).context(
-            UserMessageError::new(format!(
-                "Failed to validate and create template builder for:\n{}",
-                module_files.source_info.source_location()
-            )),
-        )?;
+        let module =
+            create_module_builder(module_files, validate_schema_fn).with_context(|| {
+                UserMessageError::new("Failed to validate and create template builder.".to_string())
+            })?;
         modules.insert(name, module);
     }
     return Ok(modules);
@@ -467,49 +456,62 @@ fn resolve_modules(
 
 /// Validates and creates the internal module representation based off the path.
 fn create_module_builder<F: Fn(&serde_yaml::Value, &str) -> anyhow::Result<()>>(
-    module_files: &ModuleFiles,
+    module_files: ModuleFiles,
     validate_schema_fn: F,
 ) -> anyhow::Result<ModuleBuilder> {
-    let module_yaml_path = &module_files.module_file;
-    if !module_yaml_path.is_file() {
-        bail!(UserMessageError::new(
-            formatcp!("{} does not exist.", MODULE_YAML_FILE_NAME).to_string()
+    let (containerfile, required_template_values, optional_template_values) = (|| {
+        let module_yaml_path = &module_files.module_file;
+        if !module_yaml_path.is_file() {
+            bail!(UserMessageError::new(
+                formatcp!("{} does not exist.", MODULE_YAML_FILE_NAME).to_string()
+            ))
+        }
+        let module_yaml_file = File::open(module_yaml_path.clone())
+            .with_context(|| format!("Could not open '{}'.", module_yaml_path.display()))?;
+        let yard_module_yaml: serde_yaml::Value =
+            serde_yaml::from_reader(BufReader::new(module_yaml_file))
+                .with_context(|| "yard-module-schema.json is not valid json.")?;
+
+        validate_schema_fn(&yard_module_yaml, &module_yaml_path.display().to_string())
+            .with_context(|| "Schema validation failed.")?;
+
+        let raw_module: YamlModule =
+            serde_yaml::from_value(yard_module_yaml).with_context(|| {
+                format!(
+            "Was able to serialize {}, but was unable to convert to internal expected model.",
+            module_yaml_path.display()
+        )
+            })?;
+        let args = raw_module.args.unwrap_or_default();
+        let required_template_values = args.required.unwrap_or(Vec::new()).into_iter().collect();
+        let optional_template_values = args.optional.unwrap_or(Vec::new()).into_iter().collect();
+
+        let containerfile_path = &module_files.containerfile;
+        if !containerfile_path.is_file() {
+            bail!(UserMessageError::new(
+                "'Containerfile' does not exist.".to_string()
+            ))
+        }
+        let containerfile = fs::read_to_string(&containerfile_path).with_context(|| {
+            format!(
+                "Could not read 'Containerfile' from {}",
+                containerfile_path.display()
+            )
+        })?;
+        Ok((
+            containerfile,
+            required_template_values,
+            optional_template_values,
         ))
-    }
-    let module_yaml_file = File::open(module_yaml_path.clone())
-        .context(format!("Could not open '{}'.", module_yaml_path.display()))?;
-    let yard_module_yaml: serde_yaml::Value =
-        serde_yaml::from_reader(BufReader::new(module_yaml_file))
-            .context("yard-module-schema.json is not valid json.")?;
-
-    validate_schema_fn(&yard_module_yaml, &module_yaml_path.display().to_string())
-        .context("Schema validation failed.")?;
-
-    let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(format!(
-        "Was able to serialize {}, but was unable to convert to internal expected model.",
-        module_yaml_path.display()
-    ))?;
-    let args = raw_module.args.unwrap_or_default();
-    let required_template_values = args.required.unwrap_or(Vec::new()).into_iter().collect();
-    let optional_template_values = args.optional.unwrap_or(Vec::new()).into_iter().collect();
-
-    let containerfile_path = &module_files.containerfile;
-    if !containerfile_path.is_file() {
-        bail!(UserMessageError::new(
-            "'Containerfile' does not exist in".to_string()
-        ))
-    }
-    let containerfile = fs::read_to_string(&containerfile_path).context(format!(
-        "Could not read 'Containerfile' from {}",
-        containerfile_path.display()
-    ))?;
+    })()
+    .context(module_files.source_info.source_location())?;
 
     Ok(ModuleBuilder {
         containerfile,
         required_template_values,
         optional_template_values,
         provided_template_values: HashMap::new(),
-        source_info: module_files.source_info.clone(),
+        source_info: module_files.source_info,
     })
 }
 
@@ -520,10 +522,12 @@ fn validate_against_schema(
     yaml: &serde_yaml::Value,
     source_name_or_path: &str,
 ) -> anyhow::Result<()> {
-    let yaml_as_json = serde_json::to_value(&yaml).context(format!(
-        "Could not convert the '{}' file to json for validation against the schema.",
-        source_name_or_path
-    ))?;
+    let yaml_as_json = serde_json::to_value(&yaml).with_context(|| {
+        format!(
+            "Could not convert the '{}' file to json for validation against the schema.",
+            source_name_or_path
+        )
+    })?;
     compiled_schema
         .validate(&yaml_as_json)
         .map_err(|errors| {
@@ -536,9 +540,11 @@ fn validate_against_schema(
             }
             UserMessageError::new(error_message)
         })
-        .context(UserMessageError::new(
-            format!("{} does not follow the proper schema.", source_name_or_path).to_string(),
-        ))?;
+        .with_context(|| {
+            UserMessageError::new(
+                format!("{} does not follow the proper schema.", source_name_or_path).to_string(),
+            )
+        })?;
     Ok(())
 }
 
@@ -565,10 +571,12 @@ fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
             let rendered_part = tera.render_str(&included_module.containerfile, &context);
             let rendered_part = match rendered_part {
                 Ok(val) => val,
-                Err(e) => Err(e).context(format!(
-                    "Could not render template for Containerfile part found at:\n{}",
-                    included_module.source_info.source_location(),
-                ))?,
+                Err(e) => Err(e).with_context(|| {
+                    format!(
+                        "Could not render template for Containerfile part found at:\n{}",
+                        included_module.source_info.source_location(),
+                    )
+                })?,
             };
             container_file_resolved_parts.push(rendered_part);
         }

@@ -85,7 +85,7 @@ async fn main() {
     };
     if let Err(error) = result {
         if is_debug {
-            eprintln!("{}", error);
+            eprintln!("{:?}", error);
         } else {
             let mut user_error_message_count = 0;
             for err in error.chain() {
