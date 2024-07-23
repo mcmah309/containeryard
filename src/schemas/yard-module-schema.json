@@ -67,15 +67,22 @@
             {
               "type": "object",
               "additionalProperties": {
-                "type": "object",
-                "properties": {
-                  "version": {
-                    "type": "string"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
                   }
-                },
-                "additionalProperties": {
-                  "type": "string"
-                }
+                ]
               }
             }
           ]
