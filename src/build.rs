@@ -22,10 +22,24 @@ pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
 pub async fn build(path: &Path) -> anyhow::Result<()> {
-    let parsed_yard_file = parse_yard_yaml(path)?;
-    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file).await?;
-    let containerfile = apply_templates(resolved_yard_file)?; // todo this should apply multiple
-    fs::write("Containerfile", containerfile)?; // todo allow this path to be configured cli
+    let parsed_yard_file = parse_yard_yaml(path).context(UserMessageError::new(
+        "Could not parse yard.yaml file".to_string(),
+    ))?;
+    let resolved_yard_file =
+        resolve_yard_yaml(parsed_yard_file)
+            .await
+            .context(UserMessageError::new(
+                "Could not resolve yard.yaml file".to_string(),
+            ))?;
+    let outputs = apply_templates(resolved_yard_file).context(UserMessageError::new(
+        "Could not apply templates".to_string(),
+    ))?;
+    for (file_name, content) in outputs {
+        let file_path = path.join(&file_name);
+        fs::write(&file_path, content).context(UserMessageError::new(
+            format!("Could not write to '{}'.", &file_name).to_string(),
+        ))?;
+    }
     Ok(())
 }
 
@@ -500,13 +514,17 @@ fn validate_against_schema(
 
 //************************************************************************//
 
+/// Contianfile name and file text
+type Outputs = Vec<(String, String)>;
+
 /// Apply args to each template and collect
-fn apply_templates(yard: ContainerfilesTemplates) -> anyhow::Result<String> {
+fn apply_templates(yard: ContainerfilesTemplates) -> anyhow::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(vec![]);
     tera.set_escape_fn(|e| e.to_string());
 
+    let mut outputs = Vec::new();
     let mut container_file_resolved_parts = Vec::new();
     for (containerfile_name, included_modules) in yard.container_files {
         for included_module in included_modules {
@@ -524,6 +542,8 @@ fn apply_templates(yard: ContainerfilesTemplates) -> anyhow::Result<String> {
             };
             container_file_resolved_parts.push(rendered_part);
         }
+        outputs.push((containerfile_name, container_file_resolved_parts.join("\n")));
+        container_file_resolved_parts.clear();
     }
-    Ok(container_file_resolved_parts.join("\n"))
+    Ok(outputs)
 }
