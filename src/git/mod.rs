@@ -1,9 +1,9 @@
 mod github;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use crate::{
-    build::{IntermediateRemote, ModuleFiles, SourceInfoKind},
+    build::{IntermediateRemote, ModuleFiles},
     common::UserMessageError,
 };
 use github::Github;

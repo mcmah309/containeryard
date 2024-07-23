@@ -24,5 +24,5 @@ tracing = "0.1"
 reqwest = { version = "0.12", features = ["json"] }
 futures = "0.3"
 regex = "1"
-enum_dispatch = "0.3"
 #bumpalo = "3"
+tera = "1"
