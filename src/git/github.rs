@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use anyhow::{bail, Context};
 use regex::Regex;
@@ -14,7 +14,7 @@ use crate::{
     common::UserMessageError,
 };
 
-use super::{GitProvider, ModuleFiles, ModuleLocationInRemote};
+use super::{GitProvider, ModuleFilesData, ModuleLocationInRemote};
 
 pub struct Github {
     web_request_client: Client,
@@ -37,7 +37,7 @@ impl GitProvider for Github {
     async fn get_module_files(
         &self,
         remote: &IntermediateRemote,
-    ) -> anyhow::Result<HashMap<String, ModuleFiles>> {
+    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
         let mut module_infos: Vec<ModuleLocationInRemote> = Vec::new();
         let (owner, repo) = extract_github_info(&remote.url)?;
         for (name, path) in remote.name_to_path.iter() {
@@ -50,7 +50,7 @@ impl GitProvider for Github {
             })
         }
 
-        let mut module_to_files: HashMap<String, ModuleFiles> = HashMap::new();
+        let mut module_to_files: HashMap<String, ModuleFilesData> = HashMap::new();
         for module_info in module_infos {
             let ModuleLocationInRemote {
                 owner,
@@ -68,35 +68,47 @@ impl GitProvider for Github {
                 .join(&path);
             let module_file = cache_dir.join(MODULE_YAML_FILE_NAME);
             let containerfile_file = cache_dir.join(CONTAINERFILE_NAME);
-            let files = [&module_file, &containerfile_file];
-            for file in files {
-                if file.exists() {
+            let files = [
+                (&module_file, MODULE_YAML_FILE_NAME),
+                (&containerfile_file, CONTAINERFILE_NAME),
+            ];
+            for (local_path, file_name) in files {
+                if local_path.exists() {
                     continue;
                 }
                 debug!("Did not find '{}' in cache.", module_file.display());
-                let file_data =
-                    get_github_file(&self.web_request_client, &owner, &repo, &commit, &path)
-                        .await
-                        .context("Failed to get file from github.")?;
-                let parent = file.parent().expect("Could not get parent directory.");
+                let file_data = get_github_file(
+                    &self.web_request_client,
+                    &owner,
+                    &repo,
+                    &commit,
+                    &format!("{}/{}", &path, file_name),
+                )
+                .await
+                .context("Failed to get file from github.")?;
+                let parent = local_path
+                    .parent()
+                    .expect("Could not get parent directory.");
                 if !parent.exists() {
                     fs::create_dir_all(parent).await.with_context(|| {
                         format!("Could not create '{}' directory.", parent.display())
                     })?;
                 }
-                fs::write(file, file_data.as_bytes())
+                fs::write(local_path, file_data.as_bytes())
                     .await
-                    .with_context(|| format!("Could not write '{}' to cache.", file.display()))?;
+                    .with_context(|| {
+                        format!("Could not write '{}' to cache.", local_path.display())
+                    })?;
             }
 
-            let containerfile: PathBuf = fs::read_to_string(&containerfile_file)
+            let containerfile_data: String = fs::read_to_string(&containerfile_file)
                 .await
                 .context(format!(
                     "Could not read '{}' to string.",
                     &containerfile_file.display()
                 ))?
                 .into();
-            let module_file: PathBuf = fs::read_to_string(&module_file)
+            let module_file_data: String = fs::read_to_string(&module_file)
                 .await
                 .context(format!(
                     "Could not read '{}' to string.",
@@ -112,9 +124,9 @@ impl GitProvider for Github {
             });
             module_to_files.insert(
                 name,
-                ModuleFiles {
-                    containerfile,
-                    module_file,
+                ModuleFilesData {
+                    containerfile_data,
+                    module_file_data,
                     source_info,
                 },
             );

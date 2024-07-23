@@ -3,7 +3,7 @@ mod github;
 use std::collections::HashMap;
 
 use crate::{
-    build::{IntermediateRemote, ModuleFiles},
+    build::{IntermediateRemote, ModuleFilesData},
     common::UserMessageError,
 };
 use github::Github;
@@ -13,7 +13,7 @@ pub trait GitProvider {
     async fn get_module_files(
         &self,
         remote: &IntermediateRemote,
-    ) -> anyhow::Result<HashMap<String, ModuleFiles>>;
+    ) -> anyhow::Result<HashMap<String, ModuleFilesData>>;
 }
 
 pub enum GitProviderKind {
@@ -24,7 +24,7 @@ impl GitProvider for GitProviderKind {
     async fn get_module_files(
         &self,
         remote: &IntermediateRemote,
-    ) -> anyhow::Result<HashMap<String, ModuleFiles>> {
+    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
         match self {
             GitProviderKind::Github(github) => github.get_module_files(remote).await,
         }
