@@ -1,4 +1,4 @@
-## yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
 inputs:
   paths:
@@ -19,4 +19,3 @@ outputs:
         user_name: test_user
         email: test_user@email.com
     - finalizer:
-
