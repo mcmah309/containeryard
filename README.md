@@ -1,6 +1,6 @@
 # Container Yard
 
-Container Yard is a declarative reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
+Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
 Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/) templating.
 
@@ -27,7 +27,7 @@ outputs:
     # Module "base" from inputs
     - base:
         version: "24.04"
-    # Inline moduls
+    # Inline modules
     - RUN apt install git
     - git_config:
         # Template
