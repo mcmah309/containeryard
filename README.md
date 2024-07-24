@@ -39,7 +39,7 @@ outputs:
 
 The above example is of a `yard.yaml` file composes modules to create containerfiles.
 
-To build the Containfiles defined in a `yard.yaml` file, simply run `yard build .`
+To build the Containerfiles defined in a `yard.yaml` file, simply run `yard build .`
 
 ## Declaring A Simple Module
 
@@ -75,6 +75,13 @@ rustup override set nightly
 cargo install containeryard
 ```
 `yard` is the cli tool for Container Yard.
+
+## Why Use ContainerYard?
+
+The goal of ContainerYard is to foster a library ecosystem of composable Containerfile modules. Users
+can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
+Want Flutter? Do the same. With ContainerYard you should never have to define certain Containerfile configs again. But
+if you do want to do something really custom, ContainerYard does not get in your way, everything is Containerfile based.
 
 ## Why Use Container Yard Over Nix Flakes
 
