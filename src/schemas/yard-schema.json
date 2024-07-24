@@ -37,7 +37,8 @@
               "url",
               "commit",
               "paths"
-            ]
+            ],
+            "additionalProperties": false
           }
         }
       },
@@ -93,5 +94,6 @@
   "required": [
     "inputs",
     "outputs"
-  ]
+  ],
+  "additionalProperties": false
 }
