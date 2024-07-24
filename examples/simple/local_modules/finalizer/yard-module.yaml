@@ -1,4 +1,4 @@
 description: "This is a modules description"
 args:
   optional:
-    - h
+    - greeting

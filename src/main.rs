@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(unused_variables)]
 // todo remove above
 
@@ -96,10 +95,14 @@ async fn main() {
             }
             if user_error_message_count == 0 {
                 error!("There should always be a user message");
-                eprintln!("For more info, try again with environment variable `CONTAINERYARD_DEBUG=true`.")
             }
         }
         eprintln!("Oops something went wrong.");
+        if !is_debug {
+            eprintln!(
+                "For more info, try again with environment variable `CONTAINERYARD_DEBUG=true`."
+            );
+        }
         exit(1);
     };
 }

@@ -33,13 +33,31 @@ pub async fn build(path: &Path) -> anyhow::Result<()> {
             .to_string(),
         )
     })?;
+    if resolved_yard_file.name_to_module.is_empty() {
+        bail!(UserMessageError::new(
+            "No modules were resolved.".to_string()
+        ))
+    }
     let outputs = apply_templates(resolved_yard_file)
         .with_context(|| UserMessageError::new("Could not apply templates".to_string()))?;
+    if outputs.is_empty() {
+        bail!(UserMessageError::new(
+            "No Containerfiles where created.".to_string()
+        ))
+    }
     for (file_name, content) in outputs {
         let file_path = path.join(&file_name);
         fs::write(&file_path, content).await.with_context(|| {
             UserMessageError::new(format!("Could not write to '{}'.", &file_name).to_string())
         })?;
+        println!(
+            "Created '{}' at '{}",
+            &file_name,
+            &file_path
+                .canonicalize()
+                .expect("Could not get absolute path.")
+                .display()
+        );
     }
     Ok(())
 }
@@ -63,11 +81,12 @@ pub struct YamlArgs {
 // Deserialized yard.yaml
 //************************************************************************//
 
-/// Created using the yard-schema.json file and https://app.quicktype.io/
+/// Created by using the yard-schema.json file and https://app.quicktype.io/ __has been modified__
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct YamlYard {
     pub inputs: YamlInputs,
-    pub outputs: HashMap<String, HashMap<String, Option<YamlOutput>>>,
+    /// Containerfile name to config
+    pub outputs: HashMap<String, Vec<YamlModuleType>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,9 +104,12 @@ pub struct YamlRemote {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum YamlOutput {
-    String(String),
-    StringMap(HashMap<String, String>),
+pub enum YamlModuleType {
+    /// Inline `- Run ...`
+    Inline(String),
+    /// Module ref `- module_name:`
+    /// Module ref with template values `- module_name: ...`
+    InputRef(HashMap<String, Option<HashMap<String, String>>>),
 }
 
 // Intermediate  yard.yaml reprsentation
@@ -120,7 +142,6 @@ enum IntermediateUseModule {
 /// Inline module
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 struct IntermediateUseInlineModule {
-    name: String,
     value: String,
 }
 
@@ -167,7 +188,7 @@ impl ModuleBuilder {
             }
         }
         Ok(Module {
-            containerfile: self.containerfile_data,
+            containerfile_template: self.containerfile_data,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
         })
@@ -186,7 +207,7 @@ struct Containerfiles {
 /// The template Containerfile file and yard-module.yaml file combined. Ready to apply
 #[derive(Debug, Clone)]
 struct Module {
-    containerfile: String,
+    containerfile_template: String,
     provided_template_values: HashMap<String, String>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -223,12 +244,12 @@ impl SourceInfo for RemoteModuleInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct InlineModuleInfo {
-    pub name: String,
+    pub value: String,
 }
 
 impl SourceInfo for InlineModuleInfo {
     fn source_location(&self) -> String {
-        format!("Inline module: {}", self.name)
+        format!("Inline module value: {}", self.value)
     }
 }
 
@@ -300,32 +321,28 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         }
     }
     let input_paths = yard_yaml.inputs.paths.unwrap_or_default();
-    let output_container_files: HashMap<String, Vec<IntermediateUseModule>> = HashMap::new();
+    let mut output_container_files: HashMap<String, Vec<IntermediateUseModule>> = HashMap::new();
     for (containerfile_name, output) in yard_yaml.outputs {
         let mut modules: Vec<IntermediateUseModule> = Vec::new();
-        for (module_name, module) in output {
-            let Some(module) = module else {
-                modules.push(IntermediateUseModule::Input(IntermediateUseInputModule {
-                    name: module_name,
-                    template_vars: HashMap::new(),
-                }));
-                continue;
-            };
+        for module in output {
             match module {
-                YamlOutput::String(value) => {
+                YamlModuleType::Inline(value) => {
                     modules.push(IntermediateUseModule::Inline(IntermediateUseInlineModule {
-                        name: module_name,
                         value,
                     }));
                 }
-                YamlOutput::StringMap(template_vars) => {
-                    modules.push(IntermediateUseModule::Input(IntermediateUseInputModule {
-                        name: module_name,
-                        template_vars,
-                    }));
+                YamlModuleType::InputRef(module_ref) => {
+                    assert!(module_ref.len() <= 1, "Internal model is wrong. This should be `- module_name: ...`");
+                    for (module_name, template_vars) in module_ref {
+                        modules.push(IntermediateUseModule::Input(IntermediateUseInputModule {
+                            name: module_name,
+                            template_vars: template_vars.unwrap_or_default(),
+                        }));
+                    }
                 }
-            }
+            };
         }
+        output_container_files.insert(containerfile_name, modules);
     }
     Ok(IntermediateYardFile {
         input_remotes,
@@ -341,6 +358,7 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
         input_paths,
         output_container_files,
     } = yard_yaml;
+    assert!(!output_container_files.is_empty(), "Ouputs should exist");
     let mut name_to_module_files_data: HashMap<String, ModuleFilesData> = HashMap::new();
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_paths {
@@ -398,12 +416,12 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
                 IntermediateUseModule::Inline(inline) => {
                     modules_for_container_file.push(
                         ModuleBuilder {
-                            containerfile_data: inline.value,
+                            containerfile_data: inline.value.clone(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
                             provided_template_values: HashMap::new(),
                             source_info: SourceInfoKind::InlineModuleInfo(InlineModuleInfo {
-                                name: inline.name,
+                                value: inline.value,
                             }),
                         }
                         .build()?,
@@ -441,10 +459,6 @@ async fn download_remotes(
         name_to_module_files_data.extend(name_to_module_files_data_part);
     }
     Ok(())
-}
-
-fn download_remote(url: &str, commit: &str) -> PathBuf {
-    unimplemented!()
 }
 
 /// validates and builds all the referenced modules.
@@ -553,7 +567,7 @@ fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
             for (var, val) in included_module.provided_template_values {
                 context.insert(var, &val);
             }
-            let rendered_part = tera.render_str(&included_module.containerfile, &context);
+            let rendered_part = tera.render_str(&included_module.containerfile_template, &context);
             let rendered_part = match rendered_part {
                 Ok(val) => val,
                 Err(e) => Err(e).with_context(|| {

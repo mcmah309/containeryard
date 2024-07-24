@@ -1,0 +1,15 @@
+# Delete me and run `yard build` to generate the below.
+FROM ubuntu:24.04
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends --no-install-suggests ca-certificates \
+    && update-ca-certificates
+RUN apt install git
+RUN git config --global user.name test_user && \
+    git config --global user.email test_user@email.com
+
+VOLUME /root/.ssh
+
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["echo 'Hello, World!'"]

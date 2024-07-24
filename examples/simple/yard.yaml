@@ -1,17 +1,22 @@
+## yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
+
 inputs:
   paths:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
-      commit: 1b1352fb789ac0db8035ab0801c1fd56ccbc1f8c
+      commit: 509262d0130d8bd32373871afa64de56eb3f1afc
       paths:
         base: bases/ubuntu/base
         git_config: independent/git_config
 
 outputs:
   Containerfile:
-    base:
-      version: "24.04"
-    inline1: RUN apt install git
-    finalizer:
+    - base:
+        version: "24.04"
+    - RUN apt install git
+    - git_config:
+        user_name: test_user
+        email: test_user@email.com
+    - finalizer:
 

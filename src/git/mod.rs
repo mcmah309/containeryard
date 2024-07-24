@@ -43,12 +43,6 @@ pub fn git_provider_from_url(url: &str) -> anyhow::Result<GitProviderKind> {
     )))
 }
 
-pub struct RemoteInfo {
-    owner: String,
-    repo: String,
-    commit: String,
-}
-
 pub struct ModuleLocationInRemote {
     owner: String,
     repo: String,
