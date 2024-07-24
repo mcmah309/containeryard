@@ -23,7 +23,8 @@
                 }
             },
             "args": ["build"],
-            "cwd": "${workspaceFolder}/examples/simple"
+            //"cwd": "${workspaceFolder}/examples/simple"
+            "cwd": "${workspaceFolder}/examples/flutter_rust"
         }
     ]
 }

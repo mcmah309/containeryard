@@ -5,7 +5,7 @@ inputs:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
-      commit: 509262d0130d8bd32373871afa64de56eb3f1afc
+      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
       paths:
         base: bases/ubuntu/base
         git_config: independent/git_config

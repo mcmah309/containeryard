@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use anyhow::{bail, Context};
@@ -24,15 +24,17 @@ pub async fn build(path: &Path) -> anyhow::Result<()> {
     let parsed_yard_file = parse_yard_yaml(path).await.with_context(|| {
         UserMessageError::new(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME).to_string())
     })?;
-    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file).await.with_context(|| {
-        UserMessageError::new(
-            formatcp!(
-                "Could not resolve all the fields in the parsed '{}' file",
-                YARD_YAML_FILE_NAME
+    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path)
+        .await
+        .with_context(|| {
+            UserMessageError::new(
+                formatcp!(
+                    "Could not resolve all the fields in the parsed '{}' file",
+                    YARD_YAML_FILE_NAME
+                )
+                .to_string(),
             )
-            .to_string(),
-        )
-    })?;
+        })?;
     if resolved_yard_file.name_to_module.is_empty() {
         bail!(UserMessageError::new(
             "No modules were resolved.".to_string()
@@ -70,6 +72,8 @@ pub struct YamlModule {
     pub args: Option<YamlArgs>,
     /// This is a modules description
     pub description: String,
+    /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
+    pub required_files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
@@ -158,6 +162,7 @@ struct IntermediateUseInputModule {
 #[derive(Debug, Clone)]
 struct ModuleBuilder {
     containerfile_data: String,
+    required_files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
     provided_template_values: HashMap<String, String>,
@@ -187,6 +192,8 @@ impl ModuleBuilder {
                 )));
             }
         }
+        // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
+        validate_path_references(&self.required_files)?;
         Ok(Module {
             containerfile_template: self.containerfile_data,
             provided_template_values: self.provided_template_values,
@@ -227,17 +234,21 @@ impl SourceInfo for LocalModuleInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct RemoteModuleInfo {
+    /// original url
     pub url: String,
+    pub owner: String,
+    pub repo: String,
     pub commit: String,
     pub path: String,
+    /// Module name
     pub name: String,
 }
 
 impl SourceInfo for RemoteModuleInfo {
     fn source_location(&self) -> String {
         format!(
-            "Repo: {}\nCommit: {}\nPath: {}",
-            self.url, self.commit, self.path
+            "Remote url: '{}', owner: '{}', repo: '{}', commit: '{}', path: '{}', name: '{}'",
+            self.url, self.owner, self.repo, self.commit, self.path, self.name
         )
     }
 }
@@ -332,7 +343,10 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
                     }));
                 }
                 YamlModuleType::InputRef(module_ref) => {
-                    assert!(module_ref.len() <= 1, "Internal model is wrong. This should be `- module_name: ...`");
+                    assert!(
+                        module_ref.len() <= 1,
+                        "Internal model is wrong. This should be `- module_name: ...`"
+                    );
                     for (module_name, template_vars) in module_ref {
                         modules.push(IntermediateUseModule::Input(IntermediateUseInputModule {
                             name: module_name,
@@ -352,14 +366,17 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
 }
 
 /// resolve and validate fields in the yard.yaml file
-async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Containerfiles> {
+async fn resolve_yard_yaml(
+    yard_yaml: IntermediateYardFile,
+    path: &Path,
+) -> anyhow::Result<Containerfiles> {
     let IntermediateYardFile {
         input_remotes,
         input_paths,
         output_container_files,
     } = yard_yaml;
     assert!(!output_container_files.is_empty(), "Ouputs should exist");
-    let mut name_to_module_files_data: HashMap<String, ModuleFilesData> = HashMap::new();
+    let mut local_name_to_module_files_data: HashMap<String, ModuleFilesData> = HashMap::new();
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_paths {
         if module_names_are_unique_check.contains(&name) {
@@ -385,7 +402,7 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
                 &module_file.display()
             ))?
             .into();
-        name_to_module_files_data.insert(
+        local_name_to_module_files_data.insert(
             name.clone(),
             ModuleFilesData {
                 containerfile_data,
@@ -402,12 +419,22 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
             )))
         }
     }
-    download_remotes(input_remotes, &mut name_to_module_files_data)
+
+    let remote_name_to_module_files: HashMap<String, ModuleFilesData> =
+        download_remotes(input_remotes).await.with_context(|| {
+            UserMessageError::new("Failed to download some remotes.".to_string())
+        })?;
+    local_name_to_module_files_data.extend(remote_name_to_module_files);
+    let name_to_module_files_data = local_name_to_module_files_data;
+    let modules: HashMap<String, ModuleBuilder> =
+        validate_schema_and_create_module_builders(name_to_module_files_data)
+            .await
+            .context("Could not resolve modules.")?;
+
+    // Resolve
+    resolve_additional_files(&modules, path)
         .await
-        .with_context(|| UserMessageError::new("Failed to download some remotes.".to_string()))?;
-    let modules = resolve_modules(name_to_module_files_data)
-        .await
-        .context("Could not resolve modules.")?;
+        .context("Could not resolve additional required files")?;
     let mut containerfiles_to_parts: HashMap<String, Vec<Module>> = HashMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
@@ -417,6 +444,7 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
                     modules_for_container_file.push(
                         ModuleBuilder {
                             containerfile_data: inline.value.clone(),
+                            required_files: Vec::new(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
                             provided_template_values: HashMap::new(),
@@ -451,18 +479,97 @@ async fn resolve_yard_yaml(yard_yaml: IntermediateYardFile) -> anyhow::Result<Co
 
 async fn download_remotes(
     remotes: Vec<IntermediateRemote>,
-    name_to_module_files_data: &mut HashMap<String, ModuleFilesData>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
+    let mut name_to_module_file_data: HashMap<String, ModuleFilesData> = HashMap::new();
     for remote in remotes {
         let git_provider = git_provider_from_url(&remote.url)?;
         let name_to_module_files_data_part = git_provider.get_module_files(&remote).await?;
-        name_to_module_files_data.extend(name_to_module_files_data_part);
+        name_to_module_file_data.extend(name_to_module_files_data_part);
+    }
+    Ok(name_to_module_file_data)
+}
+
+async fn resolve_additional_files(
+    name_to_module: &HashMap<String, ModuleBuilder>,
+    local_download_path_root: &Path,
+) -> anyhow::Result<()> {
+    for (name, module) in name_to_module {
+        match module.source_info {
+            SourceInfoKind::LocalModuleInfo(ref local) => {
+                let local_file_path = local_download_path_root.join(&local.path);
+                validate_path_references(&[local_file_path])?;
+            }
+            SourceInfoKind::RemoteModuleInfo(ref remote) => {
+                let git_provider = git_provider_from_url(&remote.url)?;
+                for file_path in module.required_files.iter() {
+                    let local_download_path = local_download_path_root.join(&file_path);
+                    if local_download_path.exists() {
+                        println!(
+                            "Found '{}' locally. Not downloading.",
+                            &local_download_path.display()
+                        );
+                    }
+                    is_local_absolute(&local_download_path)?;
+                    let remote_file_path = format!("{}/{}", remote.path, file_path);
+                    git_provider
+                        .download_file(
+                            &remote.owner,
+                            &remote.repo,
+                            &remote.commit,
+                            &remote_file_path,
+                            &local_download_path,
+                        )
+                        .await
+                        .with_context(|| {
+                            UserMessageError::new(format!(
+                                "Could not download '{}' at\n{}",
+                                &file_path,
+                                remote.source_location()
+                            ))
+                        })?;
+                }
+            }
+            SourceInfoKind::InlineModuleInfo(_) => {}
+        }
     }
     Ok(())
 }
 
-/// validates and builds all the referenced modules.
-async fn resolve_modules(
+fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> anyhow::Result<()> {
+    for file in files {
+        let file = file.as_ref();
+        let path = PathBuf::from(file);
+        is_local_absolute(&path)?;
+        if !path.exists() {
+            bail!(UserMessageError::new(format!(
+                "Path '{}' does not exist, but it should at this point.",
+                file.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// No "~" or ".."
+fn is_local_absolute(path: &Path) -> anyhow::Result<()> {
+    let error = || {
+        UserMessageError::new(format!(
+            "Path '{}' is not valid. Paths must be relative containing no '~' or '..' components.",
+            path.display()
+        ))
+    };
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) => bail!(error()),
+            Component::RootDir | Component::ParentDir => bail!(error()),
+            Component::Normal(os_str) if os_str == "~" => bail!(error()),
+            _ => (),
+        }
+    }
+    Ok(())
+}
+
+async fn validate_schema_and_create_module_builders(
     name_to_module_files_data: HashMap<String, ModuleFilesData>,
 ) -> anyhow::Result<HashMap<String, ModuleBuilder>> {
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
@@ -492,28 +599,35 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
     module_files: ModuleFilesData,
     validate_module_schema_fn: F,
 ) -> anyhow::Result<ModuleBuilder> {
-    let (required_template_values, optional_template_values) = (|| -> anyhow::Result<_> {
-        let yard_module_yaml: serde_yaml::Value =
-            serde_yaml::from_str(&module_files.module_file_data)
-                .with_context(|| "yard-module-schema.json is not valid json.")?;
+    let (required_files, required_template_values, optional_template_values) =
+        (|| -> anyhow::Result<_> {
+            let yard_module_yaml: serde_yaml::Value =
+                serde_yaml::from_str(&module_files.module_file_data)
+                    .with_context(|| "yard-module-schema.json is not valid json.")?;
 
-        validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
+            validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
 
-        let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
-            "Was able to serialize yaml, but was unable to convert to internal expected model.",
-        )?;
-        let args = raw_module.args.unwrap_or_default();
-        let required_template_values = args.required.unwrap_or(Vec::new()).into_iter().collect();
-        let optional_template_values = args.optional.unwrap_or(Vec::new()).into_iter().collect();
+            let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
+                "Was able to serialize yaml, but was unable to convert to internal expected model.",
+            )?;
+            let args = raw_module.args.unwrap_or_default();
+            let required_files = raw_module.required_files.unwrap_or_default();
+            let required_template_values = args.required.unwrap_or_default().into_iter().collect();
+            let optional_template_values = args.optional.unwrap_or_default().into_iter().collect();
 
-        Ok((required_template_values, optional_template_values))
-    })()
-    .context(UserMessageError::new(
-        module_files.source_info.source_location(),
-    ))?;
+            Ok((
+                required_files,
+                required_template_values,
+                optional_template_values,
+            ))
+        })()
+        .context(UserMessageError::new(
+            module_files.source_info.source_location(),
+        ))?;
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
+        required_files: required_files,
         required_template_values,
         optional_template_values,
         provided_template_values: HashMap::new(),

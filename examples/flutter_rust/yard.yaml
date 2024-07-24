@@ -5,7 +5,7 @@ inputs:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
-      commit: 27d92eabaa6642e30ae55fd68e62db3f67116ce5
+      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
       paths:
         base: bases/ubuntu/android
         flutter: apt/flutter

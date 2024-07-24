@@ -1,6 +1,6 @@
 mod github;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use crate::{
     build::{IntermediateRemote, ModuleFilesData},
@@ -14,6 +14,15 @@ pub trait GitProvider {
         &self,
         remote: &IntermediateRemote,
     ) -> anyhow::Result<HashMap<String, ModuleFilesData>>;
+
+    async fn download_file(
+        &self,
+        owner: &str,
+        repo: &str,
+        commit: &str,
+        remote_path: &str,
+        local_download_path: &Path,
+    ) -> anyhow::Result<()>;
 }
 
 pub enum GitProviderKind {
@@ -29,6 +38,23 @@ impl GitProvider for GitProviderKind {
             GitProviderKind::Github(github) => github.get_module_files(remote).await,
         }
     }
+
+    async fn download_file(
+        &self,
+        owner: &str,
+        repo: &str,
+        commit: &str,
+        remote_path: &str,
+        local_download_path: &Path,
+    ) -> anyhow::Result<()> {
+        match self {
+            GitProviderKind::Github(github) => {
+                github
+                    .download_file(owner, repo, commit, remote_path, local_download_path)
+                    .await
+            }
+        }
+    }
 }
 
 pub fn git_provider_from_url(url: &str) -> anyhow::Result<GitProviderKind> {
@@ -41,13 +67,4 @@ pub fn git_provider_from_url(url: &str) -> anyhow::Result<GitProviderKind> {
         "A git provider for '{}' has not been implemented yet. Please make a PR for your use case if there isn't already one :)",
         url
     )))
-}
-
-pub struct ModuleLocationInRemote {
-    owner: String,
-    repo: String,
-    commit: String,
-    path: String,
-    /// The local name in yard.yaml
-    pub name: String,
 }

@@ -1,9 +1,10 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::HashMap, path::Path, sync::LazyLock};
 
 use anyhow::{bail, Context};
+use futures::StreamExt;
 use regex::Regex;
-use reqwest::Client;
-use tokio::fs;
+use reqwest::{Client, Response};
+use tokio::{fs, io::AsyncWriteExt};
 use tracing::debug;
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
     common::UserMessageError,
 };
 
-use super::{GitProvider, ModuleFilesData, ModuleLocationInRemote};
+use super::{GitProvider, ModuleFilesData};
 
 pub struct Github {
     web_request_client: Client,
@@ -31,6 +32,15 @@ impl Github {
 fn get_client() -> Client {
     static CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
     CLIENT.clone()
+}
+
+pub struct ModuleLocationInRemote {
+    owner: String,
+    repo: String,
+    commit: String,
+    path: String,
+    /// The local name in yard.yaml
+    name: String,
 }
 
 impl GitProvider for Github {
@@ -77,7 +87,7 @@ impl GitProvider for Github {
                     continue;
                 }
                 debug!("Did not find '{}' in cache.", module_file.display());
-                let file_data = get_github_file(
+                let response = get_github_file(
                     &self.web_request_client,
                     &owner,
                     &repo,
@@ -86,6 +96,10 @@ impl GitProvider for Github {
                 )
                 .await
                 .context("Failed to get file from github.")?;
+            let file_data = response
+                    .text()
+                    .await
+                    .context("Could not read response as text.")?;
                 let parent = local_path
                     .parent()
                     .expect("Could not get parent directory.");
@@ -118,6 +132,8 @@ impl GitProvider for Github {
 
             let source_info = SourceInfoKind::RemoteModuleInfo(RemoteModuleInfo {
                 url: remote.url.clone(),
+                owner: owner,
+                repo: repo,
                 commit: commit,
                 path: path,
                 name: name.clone(),
@@ -133,6 +149,31 @@ impl GitProvider for Github {
         }
         return Ok(module_to_files);
     }
+    
+    async fn download_file(
+        &self,
+        owner: &str,
+        repo: &str,
+        commit: &str,
+        remote_path: &str,
+        local_download_path: &Path,
+    ) -> anyhow::Result<()> {        
+        let response = get_github_file(&self.web_request_client, owner, repo, commit, remote_path).await?;
+        let mut stream = response.bytes_stream();
+        let mut file = fs::File::create(local_download_path).await?;
+        while let Some(item) = stream.next().await {
+            let chunk = item?; // Get the chunk or the error if occurred
+            file.write_all(&chunk).await?;
+        }
+        Ok(())
+    }
+}
+
+fn create_url(owner: &str, repo: &str, commit: &str, path: &str) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+        owner, repo, path, commit
+    )
 }
 
 async fn get_github_file(
@@ -141,11 +182,8 @@ async fn get_github_file(
     repo: &str,
     commit: &str,
     path: &str,
-) -> anyhow::Result<String> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-        owner, repo, path, commit
-    );
+) -> anyhow::Result<Response> {
+    let url = create_url(owner, repo, commit, path);
 
     let response = client
         .get(&url)
@@ -164,11 +202,7 @@ async fn get_github_file(
         bail!("Failed to fetch file metadata for '{}'.", url);
     }
 
-    let text = response
-        .text()
-        .await
-        .with_context(|| format!("Could not read response from '{}'.", &url))?;
-    Ok(text)
+    Ok(response)
 }
 
 fn extract_github_info(url: &str) -> anyhow::Result<(String, String)> {
