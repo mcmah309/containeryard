@@ -1,5 +1,5 @@
 ```bash
 yard build .
-podman build . -t flutter_rust
-podman -it --rm flutter_rust /bin/bash
+podman build . -t simple
+podman -it --rm simple
 ```

@@ -1,4 +1,5 @@
-# Delete this file and run `yard build` to generate the below.
+# Below will be generated when you run `yard build`.
+
 ### Android
 # https://github.com/thyrlian/AndroidSDK
 FROM thyrlian/android-sdk:latest

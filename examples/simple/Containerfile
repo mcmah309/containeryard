@@ -1,14 +1,17 @@
+# Below will be generated when you run `yard build`.
+
 FROM ubuntu:24.04
 
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends --no-install-suggests ca-certificates \
     && update-ca-certificates
-RUN apt install git
+RUN apt install -y git
 RUN git config --global user.name test_user && \
     git config --global user.email test_user@email.com
 
 VOLUME /root/.ssh
 
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["echo 'Hello, World!'"]
+COPY ./setup_bash.sh /tmp/
+RUN chmod +x /tmp/setup_bash.sh && /tmp/setup_bash.sh && rm /tmp/setup_bash.sh
+ENTRYPOINT ["/bin/bash"]

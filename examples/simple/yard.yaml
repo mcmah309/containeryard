@@ -18,4 +18,4 @@ outputs:
         user_name: test_user
         email: test_user@email.com
     - bash_flavor:
-    - ENTRYPOINT ["/bin/sh"]
+    - ENTRYPOINT ["/bin/bash"]

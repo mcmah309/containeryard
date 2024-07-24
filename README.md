@@ -2,7 +2,7 @@
 
 Container Yard is a declarative reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Container Yard introduces the concept of modules for building Containerfiles. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation.
+Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/) templating.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
 ```yaml
@@ -19,6 +19,7 @@ inputs:
       paths:
         base: bases/ubuntu/base
         git_config: independent/git_config
+        bash_flavor: apt/bash_interactive/flavors/mcmah309
 
 outputs:
   # Output Containerfile created from modules
@@ -32,6 +33,7 @@ outputs:
         # Template
         user_name: test_user
         email: test_user@email.com
+    - bash_flavor:
     - finalizer:
 ```
 
@@ -64,6 +66,13 @@ required_files:
 ```
 
 For more module examples click [here](https://github.com/mcmah309/containeryard_repository/tree/master).
+
+## Installation
+```bash
+rustup override set nightly
+cargo install containeryard
+```
+`yard` is the cli tool for Container Yard.
 
 ## Why Use Container Yard Over Nix Flakes
 
