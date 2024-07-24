@@ -39,6 +39,8 @@ outputs:
 
 The above example is of a `yard.yaml` file composes modules to create containerfiles.
 
+To build the Containfiles defined in a `yard.yaml`, simply run `yard build .`
+
 ## Declaring A Simple Module
 
 A module consists of a [Tera](https://keats.github.io/tera/docs/) template named `Containerfile` and a `yard-module.yaml` file 
