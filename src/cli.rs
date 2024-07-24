@@ -22,9 +22,9 @@ pub enum Commands {
         /// Path to initialize the `yard.yaml` file.
         #[clap(default_value = ".")]
         path: PathBuf,
-        /// Template to use for initialization
-        #[clap(short, long)]
-        template: Option<String>,
+        ///// Template to use for initialization
+        // #[clap(short, long)]
+        // template: Option<String>,
     },
     ///// Template commands.
     // Template {

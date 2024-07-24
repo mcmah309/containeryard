@@ -5,11 +5,13 @@ mod build;
 mod cli;
 mod common;
 mod git;
+mod init;
 mod template;
 
 use std::{env, process::exit};
 
 use build::build;
+use init::init;
 use clap::Parser;
 use cli::{Cli, Commands};
 use common::UserMessageError;
@@ -34,10 +36,7 @@ async fn main() {
 
     let result: anyhow::Result<()> = match cli.command {
         Commands::Build { path } => build(&path).await,
-        Commands::Init { path, template } => {
-            // todo check if template exists. If so use that. Otherwise use default
-            Ok(())
-        }
+        Commands::Init { path } => init(&path).await,
         // Commands::Template { command } => {
         //     match command {
         //         TemplateCommands::Save {
