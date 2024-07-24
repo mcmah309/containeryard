@@ -23,7 +23,9 @@ outputs:
     - rust:
     - rust_essentials:
     - activate:
+    - git:
     - git_config:
         user_name: test_user
         email: test_user@email.com
+    - bash_flavor:
     - finalizer:

@@ -1,2 +1,0 @@
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["echo {{ version | default (value="'Hello, World!'") }}"]

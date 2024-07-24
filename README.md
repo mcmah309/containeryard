@@ -1,122 +1,48 @@
-# Container Yard 🚧
+# Container Yard
 
 Container Yard is a declarative reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Container Yard introduces the concept of modules to Containerfiles. 
-A module is [Tera](https://keats.github.io/tera/docs/) template for part of a Containerfile representing some specific functionality. e.g. The [rust module](todo) defines rust's installation. Modules can be combined with other modules to create a Containerfile.
+Container Yard introduces the concept of modules for building Containerfiles. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
-
-## `yard.yaml` Example Specification
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
+
 inputs:
   # Modules found on local paths
   paths:
-    module1: path/to/module
-    module2: path/to/module
+    finalizer: local_modules/finalizer
   # Modules found in a remote repos
   remotes:
-    - url: http://example.com
-      commit: 235f339e1cae6421651bb3ab1b5fcac512882c19
+    - url: https://github.com/mcmah309/containeryard_repository
+      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
       paths:
-        module3: path/to/module
-        module4: path/to/module
+        base: bases/ubuntu/base
+        git_config: independent/git_config
 
 outputs:
   # Output Containerfile created from modules
-  containerFile1:
-    # module1 from inputs
-    module1:
-      # use `value` for `templateVar1`
-      templateVar1: value
-      # use env variable `ENV_VAR` for `templateVar2`
-      templateVar2: $ENV_VAR
-    # inline module
-    inline_module: |
-      RUN echo hello
-    module2:
-    ...
-  containerFile2:
-  ...
+  Containerfile:
+    # Module "base" from inputs
+    - base:
+        version: "24.04"
+    # Inline moduls
+    - RUN apt install git
+    - git_config:
+        # Template
+        user_name: test_user
+        email: test_user@email.com
+    - finalizer:
 ```
 
+The above example is of a `yard.yaml` file composes modules to create containerfiles.
 
-## Building
-Building Containerfiles from a `yard.yaml` file is as simple as
-```bash
-yard build .
-```
+## Declaring A Simple Module
 
-## Templates
-Container Yard allows using templates to easily setup projects.
+A module consists of a [Tera](https://keats.github.io/tera/docs/) template named `Containerfile` and a `yard-module.yaml` file 
+that defines configuration options and dependencies of the template.
 
-### Initialization
-`yard.yaml` can be created with or without templates. You can create your own templates to get your projects up and running fast.
-
-#### Default Template
-
-```bash
-yard init .
-```
-
-#### Local Template
-Initialize a `yard.yaml` file from a local template.
-
-1. At some point save a local template
-
-    Save the current `yard.yaml` file as a template with the current directory's name.
-    ```bash
-    yard save .
-    ```
-    Or save the current `yard.yaml` file as a template with the specified name.
-    ```bash
-    yard save . -t python
-    ```
-
-2. At a later point initialize a `yard.yaml` file for a new project.
-
-    Create a `yard.yaml` file from the python template.
-    ```bash
-    yard init . -t python
-    ```
-#### Remote Template
-See [Creating A Template Repository](#creating-a-template-repository)
-
-### List Templates
-
-```bash
-yard list -t
-```
-
-### Delete Templates
-
-```bash
-yard delete -t <NAME>
-```
-
-## Creating A Template Repository
-Template repositories are used to save pre-configured `yard.yaml` files.
-```
-yard.yaml # `<USER>.<REPO>`
-python.yard.yaml # `<USER>.<REPO>.python`
-```
-Which are imported with
-```bash
-yard save --remote <REF> <REPO_URL> <PATH>
-```
-`<PATH>` is optional.
-
-These then can be used to generate templates locally.
-```bash
-yard init . -t <USER>.<REPO>.python
-```
-
-## Declaring a module
-
-A module is defined by creating two files - `Containerfile` and `yard-module.yaml`.
-
-`Containerfile` is the Tera template for the Containerfile part.
-
+**Containerfile**
 ```Containerfile
 COPY {{ app_source }} /app
 
@@ -124,26 +50,26 @@ WORKDIR /app
 
 RUN pip install -r requirements.txt
 ```
-
->Note: When using commands such as `COPY` in `Containerfile`, `COPY` cannot reference any file above it's current directory.
-
-`yard-module.yaml` is mainly a list of arguments expected by the module.
+**yard-module.yaml**
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
+
 description: "This is a modules description"
 args:
   required:
     - app_source
   optional:
+required_files:
+  - app_source
 ```
 
-## Creating A Module Repository
-Module repositories are used to save and load pre-configured modules. A module repository can be any git repo. See [`yard.yaml` Example Specification](#yardyaml-example-specification)
+For more module examples click [here](https://github.com/mcmah309/containeryard_repository/tree/master).
 
 ## Why Use Container Yard Over Nix Flakes
 
 Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different package managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
 
-Container Yard is also built on familiar developer tools - Containerfiles and Tera templates.
+Container Yard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
 
 ## Module Repositories
 
