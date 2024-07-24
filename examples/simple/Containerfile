@@ -1,4 +1,4 @@
-# Delete me and run `yard build` to generate the below.
+# Delete this file and run `yard build` to generate the below.
 FROM ubuntu:24.04
 
 RUN apt-get update \

@@ -1,0 +1,8 @@
+RUN mkdir -p /app
+
+WORKDIR /app
+VOLUME /app
+
+# Runs until the container is stopped
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["tail -f /dev/null"]

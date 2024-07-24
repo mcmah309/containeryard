@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
+
+inputs:
+  paths:
+    finalizer: local_modules/finalizer
+  remotes:
+    - url: https://github.com/mcmah309/containeryard_repository
+      commit: 27d92eabaa6642e30ae55fd68e62db3f67116ce5
+      paths:
+        base: bases/ubuntu/android
+        flutter: apt/flutter
+        rust: apt/rust/base
+        rust_essentials: apt/rust/essentials
+        activate: apt/rust/packages/activate
+        git: apt/git
+        git_config: independent/git_config
+        bash_flavor: apt/bash_interactive/flavors/mcmah309
+
+outputs:
+  Containerfile:
+    - base:
+    - flutter:
+    - rust:
+    - rust_essentials:
+    - activate:
+    - git_config:
+        user_name: test_user
+        email: test_user@email.com
+    - finalizer:
