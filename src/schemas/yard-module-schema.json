@@ -1,39 +1,46 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "yard-module.yaml Schema",
-    "type": "object",
-    "properties": {
-      "description": {
-        "type": "string",
-        "description": "This is a modules description"
-      },
-      "args": {
-        "type": "object",
-        "properties": {
-          "required": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1
-          },
-          "optional": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "anyOf": [
-          {
-            "required": ["optional"]
-          },
-          {
-            "required": ["required"]
-          }
-        ]
-      }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "yard-module.yaml Schema",
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": "string",
+      "description": "This is a modules description"
     },
-    "required": ["description"],
-    "additionalProperties": false
-  }
+    "args": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "optional": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["optional"]
+        },
+        {
+          "required": ["required"]
+        }
+      ]
+    },
+    "required_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of required files for the module. Must be absolution paths from the current directory without a starting \"/\"."
+    }
+  },
+  "required": ["description"],
+  "additionalProperties": false
+}
