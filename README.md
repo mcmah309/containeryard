@@ -37,8 +37,6 @@ outputs:
     - finalizer:
 ```
 
-The above example is of a `yard.yaml` file composes modules to create containerfiles.
-
 To build the Containerfiles defined in a `yard.yaml` file, simply run `yard build .`
 
 ## Declaring A Simple Module
