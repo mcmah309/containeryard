@@ -39,7 +39,7 @@ outputs:
 
 The above example is of a `yard.yaml` file composes modules to create containerfiles.
 
-To build the Containfiles defined in a `yard.yaml`, simply run `yard build .`
+To build the Containfiles defined in a `yard.yaml` file, simply run `yard build .`
 
 ## Declaring A Simple Module
 
