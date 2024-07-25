@@ -1,10 +1,12 @@
+use std::fmt::Display;
+
 pub struct UserMessageError {
-    pub message: String,
+    pub message: Box<dyn Display + 'static + Send + Sync>,
 }
 
 impl UserMessageError {
-    pub fn new(message: String) -> UserMessageError {
-        UserMessageError { message }
+    pub fn new(message: impl Display + 'static + Send + Sync) -> UserMessageError {
+        UserMessageError { message: Box::new(message) }
     }
 }
 

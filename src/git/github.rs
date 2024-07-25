@@ -95,11 +95,11 @@ impl GitProvider for Github {
                     &format!("{}/{}", &path, file_name),
                 )
                 .await
-                .context("Failed to get file from github.")?;
-            let file_data = response
+                .map_err(UserMessageError::new)?;
+                let file_data = response
                     .text()
                     .await
-                    .context("Could not read response as text.")?;
+                    .map_err(UserMessageError::new)?;
                 let parent = local_path
                     .parent()
                     .expect("Could not get parent directory.");
@@ -149,7 +149,7 @@ impl GitProvider for Github {
         }
         return Ok(module_to_files);
     }
-    
+
     async fn download_file(
         &self,
         owner: &str,
@@ -157,8 +157,9 @@ impl GitProvider for Github {
         commit: &str,
         remote_path: &str,
         local_download_path: &Path,
-    ) -> anyhow::Result<()> {        
-        let response = get_github_file(&self.web_request_client, owner, repo, commit, remote_path).await?;
+    ) -> anyhow::Result<()> {
+        let response =
+            get_github_file(&self.web_request_client, owner, repo, commit, remote_path).await?;
         let mut stream = response.bytes_stream();
         let mut file = fs::File::create(local_download_path).await?;
         while let Some(item) = stream.next().await {
