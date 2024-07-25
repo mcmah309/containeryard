@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
 inputs:
-  paths:
+  modules:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
-      paths:
+      modules:
         base: bases/ubuntu/android
         flutter: apt/flutter
         rust: apt/rust/base

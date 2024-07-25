@@ -6,7 +6,7 @@
     "inputs": {
       "type": "object",
       "properties": {
-        "paths": {
+        "models": {
           "type": "object",
           "minProperties": 1,
           "additionalProperties": {
@@ -26,7 +26,7 @@
               "commit": {
                 "type": "string"
               },
-              "paths": {
+              "models": {
                 "type": "object",
                 "additionalProperties": {
                   "type": "string"
@@ -36,7 +36,7 @@
             "required": [
               "url",
               "commit",
-              "paths"
+              "models"
             ],
             "additionalProperties": false
           }
@@ -45,7 +45,7 @@
       "anyOf": [
         {
           "required": [
-            "paths"
+            "models"
           ]
         },
         {

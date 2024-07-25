@@ -10,13 +10,13 @@ A `yard.yaml` file is used to compose modules into Containerfiles.
 
 inputs:
   # Modules found on local paths
-  paths:
+  modules:
     finalizer: local_modules/finalizer
   # Modules found in a remote repos
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
-      paths:
+      modules:
         base: bases/ubuntu/base
         git_config: independent/git_config
         bash_flavor: apt/bash_interactive/flavors/mcmah309

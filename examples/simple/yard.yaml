@@ -4,7 +4,7 @@ inputs:
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
-      paths:
+      modules:
         base: bases/ubuntu/base
         git_config: independent/git_config
         bash_flavor: apt/bash_interactive/flavors/mcmah309

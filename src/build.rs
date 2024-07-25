@@ -95,14 +95,14 @@ pub struct YamlYard {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct YamlInputs {
-    pub paths: Option<HashMap<String, String>>,
+    pub modules: Option<HashMap<String, String>>,
     pub remotes: Option<Vec<YamlRemote>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct YamlRemote {
     pub commit: String,
-    pub paths: HashMap<String, String>,
+    pub modules: HashMap<String, String>,
     pub url: String,
 }
 
@@ -123,7 +123,7 @@ pub enum YamlModuleType {
 struct IntermediateYardFile {
     input_remotes: Vec<IntermediateRemote>,
     /// Module name to path on local
-    input_paths: HashMap<String, String>,
+    input_modules: HashMap<String, String>,
     /// Containerfile name to included modules
     output_container_files: HashMap<String, Vec<IntermediateUseModule>>,
 }
@@ -327,11 +327,11 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
             input_remotes.push(IntermediateRemote {
                 url: remote.url,
                 commit: remote.commit,
-                name_to_path: remote.paths,
+                name_to_path: remote.modules,
             });
         }
     }
-    let input_paths = yard_yaml.inputs.paths.unwrap_or_default();
+    let input_modules = yard_yaml.inputs.modules.unwrap_or_default();
     let mut output_container_files: HashMap<String, Vec<IntermediateUseModule>> = HashMap::new();
     for (containerfile_name, output) in yard_yaml.outputs {
         let mut modules: Vec<IntermediateUseModule> = Vec::new();
@@ -360,7 +360,7 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
     }
     Ok(IntermediateYardFile {
         input_remotes,
-        input_paths,
+        input_modules,
         output_container_files,
     })
 }
@@ -372,13 +372,13 @@ async fn resolve_yard_yaml(
 ) -> anyhow::Result<Containerfiles> {
     let IntermediateYardFile {
         input_remotes,
-        input_paths,
+        input_modules,
         output_container_files,
     } = yard_yaml;
     assert!(!output_container_files.is_empty(), "Ouputs should exist");
     let mut local_name_to_module_files_data: HashMap<String, ModuleFilesData> = HashMap::new();
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
-    for (name, path) in input_paths {
+    for (name, path) in input_modules {
         if module_names_are_unique_check.contains(&name) {
             bail!(UserMessageError::new(format!(
                 "A module with name '{}' is declared twice.",
