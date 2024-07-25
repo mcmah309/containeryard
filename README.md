@@ -37,7 +37,8 @@ outputs:
     - finalizer:
 ```
 
-To build the Containerfiles defined in a `yard.yaml` file, simply run `yard build .`
+To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build .`.
+Which in the above case, will output a single Containerfile to your current directory.
 
 ## Declaring A Simple Module
 
@@ -76,10 +77,14 @@ cargo install containeryard
 
 ## Why Use ContainerYard?
 
+Developers constantly rewrite the same Containerfile/Dockerfile configs. Besides taking away developer time, 
+these configs become hard to maintain/upgrade and adding new features feels like starting from scratch again.
 The goal of ContainerYard is to foster a library ecosystem of composable Containerfile modules. Users
 can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
 Want Flutter? Do the same. With ContainerYard you should never have to define certain Containerfile configs again. But
-if you do want to do something really custom, ContainerYard does not get in your way, everything is Containerfile based.
+if you do want to do something custom, ContainerYard does not get in your way, everything is Containerfile based 
+and the output is a pure Containerfile. No need to learn a complex tool, no need to re-invent the wheel, Containerfiles 
+and Tera templates are powerful enough. Just let ContainerYard be the glue.
 
 ## Why Use Container Yard Over Nix Flakes
 
