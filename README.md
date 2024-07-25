@@ -2,7 +2,7 @@
 
 Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
+Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
 ```yaml
@@ -14,7 +14,7 @@ inputs:
     finalizer: local_modules/finalizer
   # Modules found in a remote repos
   remotes:
-    - url: https://github.com/mcmah309/containeryard_repository
+    - url: https://github.com/mcmah309/yard_module_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
       modules:
         base: bases/ubuntu/base
@@ -66,7 +66,7 @@ args:
 required_files:
 ```
 
-For more module examples click [here](https://github.com/mcmah309/containeryard_repository/tree/master).
+For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
 ## Installation
 ```bash
@@ -102,7 +102,7 @@ Open the project in vscode, click the "open in container" button and you are rea
 
 ## Module Repositories
 
-- <https://github.com/mcmah309/containeryard_repository.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
+- <https://github.com/mcmah309/yard_module_repository.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
 
 **\*Feel free to create a PR to add your own!\***
 

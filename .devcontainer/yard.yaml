@@ -2,7 +2,7 @@
 
 inputs:
   remotes:
-    - url: https://github.com/mcmah309/containeryard_repository
+    - url: https://github.com/mcmah309/yard_module_repository
       commit: 10b42c6d1c3aed7ad9d87163e7cb3cd66b5ccbb5
       modules:
         base: bases/ubuntu/base

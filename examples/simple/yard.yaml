@@ -4,7 +4,7 @@ inputs:
   # modules:
   #     finalizer: local_modules/finalizer
   remotes:
-    - url: https://github.com/mcmah309/containeryard_repository
+    - url: https://github.com/mcmah309/yard_module_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
       modules:
         base: bases/ubuntu/base
