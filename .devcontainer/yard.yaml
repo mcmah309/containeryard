@@ -14,7 +14,6 @@ inputs:
         bash_flavor: apt/bash_interactive/flavors/mcmah309
 
 outputs:
-  # Output Containerfile created from modules
   Containerfile:
     - base:
     - rust:
