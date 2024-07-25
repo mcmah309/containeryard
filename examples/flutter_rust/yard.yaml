@@ -5,7 +5,7 @@ inputs:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
-      commit: 3c81a4a383f4446437df364ef0a6ba17bc88c479
+      commit: 1ff83993d108d9199ab4951a3a52b352733a214f
       modules:
         "22_04": bases/ubuntu/android/ubuntu_22_04
         "24_04": bases/ubuntu/android/ubuntu_24_04
