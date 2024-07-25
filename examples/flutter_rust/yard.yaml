@@ -5,7 +5,7 @@ inputs:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
-      commit: 8bf03a1e4efbf05e15d1a18c1380aa9a32c9c6dc
+      commit: 3c81a4a383f4446437df364ef0a6ba17bc88c479
       modules:
         "22_04": bases/ubuntu/android/ubuntu_22_04
         "24_04": bases/ubuntu/android/ubuntu_24_04
@@ -38,7 +38,7 @@ outputs:
     - rust_essentials:
     - git:
     - git_config:
-        user_name: mcmah309
+        user_name: test
         email: test@gmail.com
     - bash_flavor:
     - finalizer:
