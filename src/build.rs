@@ -304,19 +304,20 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         .compile(&yard_schema)
         .expect("yard-schema.json is not a valid json schema");
 
-    let yard_yaml_file_data = fs::read_to_string(&path.join(YARD_YAML_FILE_NAME))
+    let yard_file_path = path.join(YARD_YAML_FILE_NAME);
+    let yard_yaml_file_data = fs::read_to_string(&yard_file_path)
         .await
         .with_context(|| {
-            UserMessageError::new(format!("Could read '{}'.", &path.display()).to_string())
+            UserMessageError::new(format!("Could read '{}'.", &yard_file_path.display()).to_string())
         })?;
     let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
-        .with_context(|| format!("{} is not valid yaml.", &path.display()))?;
+        .with_context(|| format!("{} is not valid yaml.", &yard_file_path.display()))?;
     validate_against_schema(&compiled_schema, &yard_yaml)
-        .with_context(|| format!("For path '{}'.", &path.display()))?;
+        .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
     let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).context(UserMessageError::new(
         format!(
             "Was able to serialize '{}', but was unable to convert to internal expected model.",
-            path.display()
+            yard_file_path.display()
         )
         .to_string(),
     ))?;
