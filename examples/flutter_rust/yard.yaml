@@ -5,9 +5,11 @@ inputs:
     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
-      commit: 4b27da2d598d2ffff56831c4d5e3440c8646e0ce
+      commit: 8bf03a1e4efbf05e15d1a18c1380aa9a32c9c6dc
       modules:
-        base: bases/ubuntu/android/ubuntu_22_04
+        "22_04": bases/ubuntu/android/ubuntu_22_04
+        "24_04": bases/ubuntu/android/ubuntu_24_04
+        android_sdk: dependent/android_sdk/developer_tools
         flutter: dependent/apt/flutter
         rust: dependent/apt/rust
         rust_essentials: dependent/apt/rust/essentials
@@ -16,14 +18,27 @@ inputs:
         bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309
 
 outputs:
-  Containerfile:
-    - base:
+  Containerfile.22_04:
+    - "22_04":
+    - android_sdk:
     - flutter:
     - rust:
     - rust_essentials:
     - git:
     - git_config:
-        user_name: test_user
-        email: test_user@email.com
+        user_name: test
+        email: test@gmail.com
+    - bash_flavor:
+    - finalizer:
+  Containerfile.24_04:
+    - "24_04":
+    - android_sdk:
+    - flutter:
+    - rust:
+    - rust_essentials:
+    - git:
+    - git_config:
+        user_name: mcmah309
+        email: test@gmail.com
     - bash_flavor:
     - finalizer:
