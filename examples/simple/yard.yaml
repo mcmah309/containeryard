@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
 inputs:
+  # modules:
+  #     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/containeryard_repository
       commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
