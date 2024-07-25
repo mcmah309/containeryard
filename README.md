@@ -70,7 +70,6 @@ For more module examples click [here](https://github.com/mcmah309/yard_module_re
 
 ## Installation
 ```bash
-rustup override set nightly
 cargo install containeryard
 ```
 `yard` is the cli tool for Container Yard.
