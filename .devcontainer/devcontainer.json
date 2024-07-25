@@ -1,0 +1,33 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+
+{
+	"name": "ContainerYard Dev Container",
+	"build": {
+		"dockerfile": "Containerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"fill-labs.dependi",
+				"vadimcn.vscode-lldb",
+				"formulahendry.code-runner",
+				"chunsen.bracket-select",
+				"dzhavat.bracket-pair-toggler",
+				"tamasfe.even-better-toml",
+				"waderyan.gitblame",
+				"redhat.vscode-yaml",
+				// "oderwat.indent-rainbow",
+			]
+		}
+	},
+	"mounts": [
+		// ssh
+		// "source=/home/henry/.ssh/,target=/root/.ssh,type=bind",
+	],
+	"runArgs": [
+		"--privileged",
+		"--net=host",
+	],
+	"remoteUser": "root",
+}
