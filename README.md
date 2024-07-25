@@ -47,11 +47,12 @@ that defines configuration options and dependencies of the template.
 
 **Containerfile**
 ```Containerfile
-COPY {{ app_source }} /app
+FROM alpine:{{ version | default (value="latest") }}
 
-WORKDIR /app
-
-RUN pip install -r requirements.txt
+RUN apk update \
+    && apk upgrade \
+    && apk add --no-cache ca-certificates \
+    && update-ca-certificates
 ```
 **yard-module.yaml**
 ```yaml
@@ -60,10 +61,9 @@ RUN pip install -r requirements.txt
 description: "This is a modules description"
 args:
   required:
-    - app_source
   optional:
+    - version
 required_files:
-  - app_source
 ```
 
 For more module examples click [here](https://github.com/mcmah309/containeryard_repository/tree/master).
