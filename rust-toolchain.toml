@@ -2,3 +2,8 @@
 
 [toolchain]
 channel = "nightly"
+components = [
+  "cargo",
+  "clippy",
+  "rustfmt"
+]
