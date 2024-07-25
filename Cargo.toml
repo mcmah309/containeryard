@@ -2,7 +2,7 @@
 name = "containeryard"
 description = "Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles)."
 license = "Apache-2.0"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 repository = "https://github.com/mcmah309/containeryard"
 
