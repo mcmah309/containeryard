@@ -2,7 +2,7 @@
 
 Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/) templating.
+Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/containeryard_repository/tree/master/apt/rust/base) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
 ```yaml
@@ -42,7 +42,7 @@ Which in the above case, will output a single Containerfile to your current dire
 
 ## Declaring A Simple Module
 
-A module consists of a [Tera](https://keats.github.io/tera/docs/) template named `Containerfile` and a `yard-module.yaml` file 
+A module consists of a [Tera](https://keats.github.io/tera/docs/#templates) template named `Containerfile` and a `yard-module.yaml` file 
 that defines configuration options and dependencies of the template.
 
 **Containerfile**
