@@ -87,6 +87,14 @@ Nix flakes guarantees reproducibility at the cost of developer flexibility. Cont
 
 Container Yard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
 
+## Contributing
+
+Feel free to open an issue with any suggestions/ideas/bugs you may have and/or create PR's.
+
+ContainerYard builds its own dev container :D see [here](https://github.com/mcmah309/containeryard/tree/master/.devcontainer).
+Open the project in vscode, click the "open in container" button and you are ready to go! Otherwise just use the provided Containerfile.
+
+
 ## Module Repositories
 
 - <https://github.com/mcmah309/containeryard_repository.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
