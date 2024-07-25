@@ -509,6 +509,7 @@ async fn resolve_additional_files(
                             "Found '{}' locally. Not downloading.",
                             &local_download_path.display()
                         );
+                        continue;
                     }
                     is_local_absolute(&local_download_path)?;
                     let remote_file_path = format!("{}/{}", remote.path, file_path);
