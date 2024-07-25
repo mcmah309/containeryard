@@ -5,6 +5,7 @@ license = "Apache-2.0"
 version = "0.2.1"
 edition = "2021"
 repository = "https://github.com/mcmah309/containeryard"
+rust-version = "1.80"
 
 [[bin]]
 name = "yard"

@@ -4,13 +4,12 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends --no-install-suggests ca-certificates \
     && update-ca-certificates
-# Based off: https://github.com/rust-lang/docker-rust/blob/master/1.79.0/bookworm/slim/Dockerfile
-# Current: https://github.com/rust-lang/docker-rust/blob/4197463752e5e04fce8d8300087dca5cc8124301/1.79.0/bookworm/slim/Dockerfile
+# Based off: https://github.com/rust-lang/docker-rust/blob/a4865cbc685671e394feaec1be0a6dde2c69e696/1.80.0/bookworm/slim/Dockerfile
 
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.79.0
+    RUST_VERSION=1.80.0
 
 RUN set -eux; \
     apt-get update; \

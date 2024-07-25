@@ -3,15 +3,15 @@
 inputs:
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
-      commit: 10b42c6d1c3aed7ad9d87163e7cb3cd66b5ccbb5
+      commit: 1ff83993d108d9199ab4951a3a52b352733a214f
       modules:
-        base: bases/ubuntu/base
-        rust: apt/rust/base
-        rust_essentials: apt/rust/essentials
-        rust_components: independent/rust/components
-        git: apt/git
+        base: bases/ubuntu
+        rust: dependent/apt/rust
+        rust_essentials: dependent/apt/rust/essentials
+        rust_components: dependent/rust/components
+        git: dependent/apt/git
         # git_config: independent/git_config
-        bash_flavor: apt/bash_interactive/flavors/mcmah309
+        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309
 
 outputs:
   Containerfile:
