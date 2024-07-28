@@ -26,8 +26,8 @@ outputs:
     - rust_essentials:
     - git:
     - git_config:
-        user_name: test
-        email: test@gmail.com
+        user_name: $(git config --get user.name)
+        email: $(git config --get user.email)
     - bash_flavor:
     - finalizer:
   Containerfile.24_04:
@@ -38,7 +38,7 @@ outputs:
     - rust_essentials:
     - git:
     - git_config:
-        user_name: test
-        email: test@gmail.com
+        user_name: $(git config --get user.name)
+        email: $(git config --get user.email)
     - bash_flavor:
     - finalizer:

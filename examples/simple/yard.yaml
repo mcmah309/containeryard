@@ -14,10 +14,10 @@ inputs:
 outputs:
   Containerfile:
     - base:
-        version: "24.04"
+        version: $UBUNTU_VERSION
     - RUN apt install -y git
     - git_config:
-        user_name: test_user
-        email: test_user@email.com
+        user_name: $(git config --get user.name)
+        email: $(git config --get user.email)
     - bash_flavor:
     - ENTRYPOINT ["/bin/bash"]
