@@ -5,6 +5,10 @@ on:
     branches:
       - test-workflow
 
+# Needed to create release
+permissions:
+  contents: write
+
 jobs:
   build-and-publish-deb:
     runs-on: ubuntu-latest
