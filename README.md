@@ -70,9 +70,9 @@ For more module examples click [here](https://github.com/mcmah309/yard_module_re
 
 ## Installation
 
-### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
-
 Note: `yard` is the cli tool for ContainerYard.
+
+### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
 
 ```bash
 RELEASE_VER=<INSERT_CURRENT_VERSION> # e.g. RELEASE_VER='v0.2.2'
