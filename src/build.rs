@@ -1,10 +1,12 @@
+use core::str;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     path::{Component, Path, PathBuf},
+    process::Command,
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use const_format::formatcp;
 use jsonschema::{Draft, JSONSchema};
 use serde::{Deserialize, Serialize};
@@ -305,11 +307,9 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         .expect("yard-schema.json is not a valid json schema");
 
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
-    let yard_yaml_file_data = fs::read_to_string(&yard_file_path)
-        .await
-        .with_context(|| {
-            UserMessageError::new(format!("Could read '{}'.", &yard_file_path.display()).to_string())
-        })?;
+    let yard_yaml_file_data = fs::read_to_string(&yard_file_path).await.with_context(|| {
+        UserMessageError::new(format!("Could read '{}'.", &yard_file_path.display()).to_string())
+    })?;
     let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
         .with_context(|| format!("{} is not valid yaml.", &yard_file_path.display()))?;
     validate_against_schema(&compiled_schema, &yard_yaml)
@@ -465,6 +465,7 @@ async fn resolve_yard_yaml(
                     })?;
                     let mut module = module.clone();
                     for (var, val) in declared_module.template_vars {
+                        let val = resolve_template_value(val)?;
                         module.provided_template_values.insert(var, val);
                     }
                     modules_for_container_file.push(module.build()?);
@@ -661,6 +662,43 @@ fn validate_against_schema(
             UserMessageError::new("yaml does not follow the proper schema.".to_string())
         })?;
     Ok(())
+}
+
+//************************************************************************//
+
+fn resolve_template_value(val: String) -> anyhow::Result<String> {
+    // shell command
+    if val.starts_with("$(") && val.ends_with(")") {
+        let command = &val[2..val.len() - 1];
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .output()
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to execute command '{}' for template value: {}",
+                    command,
+                    e
+                )
+            })?;
+        if !output.status.success() {
+            bail!(
+                "Command '{}' failed with status: {}",
+                command,
+                output.status
+            );
+        }
+        let val = str::from_utf8(&output.stdout)?;
+        return Ok(val.to_string());
+    }
+    // env var
+    if val.starts_with("$") {
+        let var = &val[1..];
+        let val = std::env::var(var)
+            .with_context(|| format!("Could not get env var '{}' for template value.", var))?;
+        return Ok(val);
+    }
+    Ok(val)
 }
 
 //************************************************************************//
