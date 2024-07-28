@@ -66,5 +66,5 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/tags/${{ needs.create-release.outputs.version }}/assets
           asset_path: ./target/debian/*.deb
-          asset_name: containeryard-${{ steps.create-release.outputs.version }}.deb
+          asset_name: containeryard-${{ needs.create-release.outputs.version }}.deb
           asset_content_type: application/x-debian-package
