@@ -16,6 +16,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Set up Rust
+      uses: actions/setup-rust@v1
+      with:
+        rust-version: stable
+    - name: Update Rust to the latest version
+      run: rustup update stable
+    - name: Verify Rust version
+      run: rustc --version
     - name: Build
       run: cargo build --verbose
     - name: Run tests
