@@ -6,17 +6,18 @@ mod cli;
 mod common;
 mod git;
 mod init;
-mod template;
+mod update;
 
 use std::{env, process::exit};
 
 use build::build;
-use init::init;
 use clap::Parser;
 use cli::{Cli, Commands};
 use common::UserMessageError;
+use init::init;
 use tracing::{error, Level};
 use tracing_subscriber::FmtSubscriber;
+use update::update;
 
 #[tokio::main]
 async fn main() {
@@ -37,48 +38,7 @@ async fn main() {
     let result: anyhow::Result<()> = match cli.command {
         Commands::Build { path } => build(&path).await,
         Commands::Init { path } => init(&path).await,
-        // Commands::Template { command } => {
-        //     match command {
-        //         TemplateCommands::Save {
-        //             path,
-        //             template,
-        //             remote,
-        //         } => {
-        //             let template_name = template.unwrap_or_else(|| {
-        //                 if path.as_path() == Path::new(".") {
-        //                     let path =
-        //                         std::env::current_dir().expect("Failed to get current directory");
-        //                     return path
-        //                         .parent()
-        //                         .expect("Failed to get parent directory")
-        //                         .file_name()
-        //                         .unwrap()
-        //                         .to_str()
-        //                         .unwrap()
-        //                         .to_string();
-        //                 }
-        //                 return path.file_name().unwrap().to_str().unwrap().to_string();
-        //             });
-        //             if remote.is_empty() {
-        //                 save_local_yard_file_as_template(&path, template_name);
-        //             } else {
-        //                 assert!(remote.len() == 2);
-        //                 let ref_ = remote[0].to_string();
-        //                 let url = remote[1].to_string();
-        //                 save_remote_yard_file_as_template(&path, template_name, ref_, url);
-        //             }
-        //             Ok(())
-        //         }
-        //         TemplateCommands::List => {
-        //             // todo list templates
-        //             Ok(())
-        //         }
-        //         TemplateCommands::Delete { template } => {
-        //             // todo delete template with name
-        //             Ok(())
-        //         }
-        //     }
-        // }
+        Commands::Update { path } => update(&path),
     };
     if let Err(error) = result {
         if is_debug {
