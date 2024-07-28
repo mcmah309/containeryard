@@ -6,6 +6,8 @@ on:
       - created
       - edited
       - published
+      - unpublished
+      - prereleased
 
 jobs:
   build-and-publish-deb:
