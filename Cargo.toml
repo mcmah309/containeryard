@@ -1,6 +1,7 @@
 [package]
 name = "containeryard"
 description = "Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles)."
+authors = ["Henry McMahon"]
 license = "Apache-2.0"
 version = "0.2.2"
 edition = "2021"
@@ -31,3 +32,15 @@ tera = "1"
 
 [dev-dependencies]
 assert_cmd = "2"
+
+
+[package.metadata.deb]
+maintainer = "Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
+copyright = "2024, Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
+extended-description = """Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers."""
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+ ["target/release/yard", "usr/bin/", "755"],
+]
