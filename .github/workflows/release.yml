@@ -17,22 +17,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Get the release version, from the tag
+      - name: Get the release version from the tag
         if: env.VERSION == ''
-        run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+        run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_ENV
       - name: Show the version
         run: |
           echo "version is: $VERSION"
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Check that tag version and Cargo.toml version are the same
+        shell: bash
+        run: |
+          if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
+            exit 1
+          fi
+      - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.VERSION }}
-          release_name: ${{ env.VERSION }}
-          draft: true
-          prerelease: false
+        run: gh release create $VERSION --draft --verify-tag --title $VERSION
     outputs:
       version: ${{ env.VERSION }}
 
@@ -61,11 +62,11 @@ jobs:
           name: containeryard-deb
           path: ./target/debian/*.deb
       - name: Upload .deb to Release
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: ./target/debian/containeryard-${{ needs.create-release.outputs.version }}-1_amd64.deb
-          asset_name: containeryard-${{ needs.create-release.outputs.version }}-1_amd64.deb
-          asset_content_type: application/x-debian-package
+        shell: bash
+        run: |
+          cd ./target/debian/
+          version="${{ needs.create-release.outputs.version }}"
+          deb_name=containeryard-${{ needs.create-release.outputs.version }}-1_amd64.deb
+          gh release upload "$version" "$deb_name"
