@@ -18,13 +18,14 @@ jobs:
         with:
           toolchain: stable
           override: true
+        # It may take github a few days to update to latest version
+      - name: Update Rust
+        run: rustup update
 
       - name: Install cargo-deb
         run: cargo install cargo-deb
-
       - name: Build .deb package
         run: cargo deb
-
       - name: Upload .deb package as artifact
         uses: actions/upload-artifact@v3
         with:
