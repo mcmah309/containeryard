@@ -1,8 +1,8 @@
-# Container Yard
+# ContainerYard
 
-Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
+ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Container Yard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
+ContainerYard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
 
 A `yard.yaml` file is used to compose modules into Containerfiles.
 ```yaml
@@ -72,6 +72,8 @@ For more module examples click [here](https://github.com/mcmah309/yard_module_re
 
 ### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
 
+Note: `yard` is the cli tool for ContainerYard.
+
 ```bash
 RELEASE_VER=<INSERT_CURRENT_VERSION> # e.g. RELEASE_VER='v0.2.2'
 deb_file="containeryard_$(echo $RELEASE_VER | sed 's/^v//')-1_amd64.deb"
@@ -84,7 +86,6 @@ sudo dpkg -i "$deb_file"
 ```bash
 cargo install containeryard
 ```
-`yard` is the cli tool for Container Yard.
 
 ## Why Use ContainerYard?
 
