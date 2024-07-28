@@ -39,6 +39,7 @@ jobs:
 
   # Build and publish .deb file to release draft
   build-and-publish-deb:
+    needs: ['create-release']
     runs-on: ubuntu-latest
 
     steps:
