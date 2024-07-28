@@ -26,7 +26,7 @@ outputs:
   Containerfile:
     # Module "base" from inputs
     - base:
-         # Inputs, shell commands $(..) and $.. ENV vars also allowed.
+         # Inputs, shell commands `$(..)` and ENV vars `$..` also supported
         version: "24.04"
     # Inline modules
     - RUN apt install git
