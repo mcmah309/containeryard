@@ -62,6 +62,7 @@ jobs:
         shell: bash
         run: |
           cd ./target/debian/
+          ls
           version="${{ needs.create-release.outputs.version }}"
           deb_name=containeryard-${{ needs.create-release.outputs.version }}-1_amd64.deb
           gh release upload "$version" "$deb_name"
