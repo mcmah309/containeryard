@@ -33,7 +33,7 @@ jobs:
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create $VERSION --draft --verify-tag --title $VERSION
+        run: gh release create ${{ github.ref_name }} --draft --verify-tag --title ${{ github.ref_name }}
     outputs:
       version: ${{ env.VERSION }}
 
@@ -56,11 +56,6 @@ jobs:
         run: cargo install cargo-deb
       - name: Build .deb package
         run: cargo deb
-      - name: Upload .deb package as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: containeryard-deb
-          path: ./target/debian/*.deb
       - name: Upload .deb to Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
