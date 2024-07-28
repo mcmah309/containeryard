@@ -1,8 +1,9 @@
-name: Release
+name: Test Release Workflow
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - test-workflow
 
 jobs:
   build-and-publish-deb:
@@ -34,10 +35,10 @@ jobs:
         id: create_release
         uses: actions/create-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          draft: false
-          prerelease: false
+          tag_name: test-tag-${{ github.sha }}
+          release_name: Test Release ${{ github.sha }}
+          draft: true
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,5 +47,6 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./target/debian/*.deb
-          asset_name: containeryard_${{ github.ref }}.deb
+          asset_name: containeryard_${{ github.sha }}.deb
           asset_content_type: application/x-debian-package
+
