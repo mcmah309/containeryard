@@ -2,7 +2,10 @@ name: Release
 
 on:
   release:
-    types: [published]
+    types: 
+      - created
+      - edited
+      - published
 
 jobs:
   build-and-publish-deb:
