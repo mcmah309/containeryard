@@ -23,6 +23,7 @@ pub enum Commands {
         #[clap(default_value = ".")]
         path: PathBuf,
     },
+    /// Updates all "commit" entries for each remote to the current "HEAD".
     Update {
         /// Path to the `yard.yaml` file.
         #[clap(default_value = ".")]
