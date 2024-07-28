@@ -69,6 +69,18 @@ required_files:
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
 ## Installation
+
+### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
+
+```bash
+RELEASE_VER=<INSERT_CURRENT_VERSION> # e.g. RELEASE_VER='v0.2.2'
+deb_file="containeryard_$(echo $RELEASE_VER | sed 's/^v//')-1_amd64.deb"
+curl -LO https://github.com/mcmah309/containeryard/releases/download/$RELEASE_VER/$deb_file
+sudo dpkg -i "$deb_file"
+```
+
+### Cargo
+
 ```bash
 cargo install containeryard
 ```
