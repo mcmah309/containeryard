@@ -1,15 +1,39 @@
 name: Release
 
+# Only do the release on vX.Y.Z tags.
 on:
-  release:
-    types: 
-      - created
-      - edited
-      - published
-      - unpublished
-      - prereleased
+  push:
+    tags:
+    - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
+  # Create draft release with matching tag. Ensure matches cargo version.
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get the release version from the tag
+        if: env.VERSION == ''
+        run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      - name: Show the version
+        run: |
+          echo "version is: $VERSION"
+      - name: Check that tag version and Cargo.toml version are the same
+        shell: bash
+        run: |
+          if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
+            exit 1
+          fi
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create $VERSION --draft --verify-tag --title $VERSION
+    outputs:
+      version: ${{ env.VERSION }}
+
+  # Build and publish .deb file to release draft
   build-and-publish-deb:
     runs-on: ubuntu-latest
 
@@ -35,7 +59,7 @@ jobs:
       - name: Upload .deb to Release
         uses: actions/upload-release-asset@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/tags/${{ needs.create-release.outputs.version }}/assets
           asset_path: ./target/debian/*.deb
-          asset_name: containeryard_${{ github.ref_name }}.deb
+          asset_name: containeryard-${{ steps.create-release.outputs.version }}.deb
           asset_content_type: application/x-debian-package
