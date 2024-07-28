@@ -1,3 +1,6 @@
+# References: 
+# - https://github.com/BurntSushi/ripgrep/blob/master/.github/workflows/release.yml
+
 name: Release
 
 on:
