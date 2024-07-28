@@ -26,13 +26,13 @@ outputs:
   Containerfile:
     # Module "base" from inputs
     - base:
+         # Inputs, shell commands $(..) and $.. ENV vars also allowed.
         version: "24.04"
     # Inline modules
     - RUN apt install git
     - git_config:
-        # Template
-        user_name: test_user
-        email: test_user@email.com
+        user_name: $(git config --get user.name)
+        email: $(git config --get user.email)
     - bash_flavor:
     - finalizer:
 ```
