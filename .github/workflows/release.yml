@@ -1,10 +1,10 @@
 name: Release
 
-# Only do the release on vX.Y.Z tags.
+# Only do the release on X.Y.Z tags.
 on:
   push:
     tags:
-    - "v[0-9]+.[0-9]+.[0-9]+"
+    - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   # Create draft release with matching tag. Ensure matches cargo version.
