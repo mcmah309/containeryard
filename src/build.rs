@@ -689,7 +689,7 @@ fn resolve_template_value(val: String) -> anyhow::Result<String> {
             );
         }
         let val = str::from_utf8(&output.stdout)?;
-        return Ok(val.to_string());
+        return Ok(val.trim().to_string());
     }
     // env var
     if val.starts_with("$") {
