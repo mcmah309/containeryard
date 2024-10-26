@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
+
+inputs:
+  modules:
+    one: one
+    two: two
+
+outputs:
+  Containerfile:
+    - one:
+    - two:
