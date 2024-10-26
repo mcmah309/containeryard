@@ -174,7 +174,14 @@ impl GitProvider for Git {
             .spawn()?
             .wait()
             .await;
-        
+        if !checkout_command_exit?.success() {
+            bail!(format!(
+                "Could not checkout commit `{}` in repo `{}`",
+                self.commit,
+                self.url
+            ))
+        }
+
         // get file data
         let remote_file_path = repo_dir.join(&remote_path);
         if !remote_file_path.is_file() {

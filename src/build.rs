@@ -3,7 +3,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     path::{Component, Path, PathBuf},
-    process::Command,
 };
 
 use anyhow::{anyhow, bail, Context};
@@ -709,24 +708,13 @@ fn resolve_template_value(val: String) -> anyhow::Result<String> {
     // shell command
     if val.starts_with("$(") && val.ends_with(")") {
         let command = &val[2..val.len() - 1];
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to execute command '{}' for template value: {}",
-                    command,
-                    e
-                )
-            })?;
-        if !output.status.success() {
-            bail!(
-                "Command '{}' failed with status: {}",
+        let output = duct_sh::sh_dangerous(command).run().map_err(|e| {
+            anyhow!(
+                "Failed to execute command '{}' for template value: {}",
                 command,
-                output.status
-            );
-        }
+                e
+            )
+        })?;
         let val = str::from_utf8(&output.stdout)?;
         return Ok(val.trim().to_string());
     }
