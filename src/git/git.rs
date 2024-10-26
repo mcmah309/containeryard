@@ -281,8 +281,8 @@ fn extract_user_and_repo_from_http(url: &str) -> anyhow::Result<(String, String)
 //************************************************************************//
 
 fn maybe_log_output(mut command: Command) -> Command {
-    if is_debug() {
-        command.stdout(Stdio::inherit());
+    if !is_debug() {
+        command.stdout(Stdio::null());
     }
     command
 }
