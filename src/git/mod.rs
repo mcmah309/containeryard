@@ -1,5 +1,4 @@
 mod git;
-mod github;
 
 use std::{
     collections::HashMap,
@@ -102,7 +101,6 @@ pub trait GitProvider {
 
 #[derive(Debug)]
 pub enum GitProviderKind {
-    Github(Git), // todo remove or more custom impl?
     /// Fallback (git clone)
     Git(Git),
 }
@@ -113,22 +111,19 @@ impl GitProvider for GitProviderKind {
         name_to_path: HashMap<String, String>,
     ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
         match self {
-            GitProviderKind::Github(github) => github.retrieve_module(name_to_path).await,
-            GitProviderKind::Git(github) => github.retrieve_module(name_to_path).await,
+            GitProviderKind::Git(git) => git.retrieve_module(name_to_path).await,
         }
     }
 
     fn reference_info<'a>(&'a self) -> ReferenceInfo<'a> {
         match self {
-            GitProviderKind::Github(github) => github.reference_info(),
-            GitProviderKind::Git(github) => github.reference_info(),
+            GitProviderKind::Git(git) => git.reference_info(),
         }
     }
 
     async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String> {
         match self {
-            GitProviderKind::Github(github) => github.extract_remote_path_data(remote_path).await,
-            GitProviderKind::Git(github) => github.extract_remote_path_data(remote_path).await,
+            GitProviderKind::Git(git) => git.extract_remote_path_data(remote_path).await,
         }
     }
 
@@ -137,13 +132,8 @@ impl GitProvider for GitProviderKind {
         remote_path: &str,
     ) -> anyhow::Result<String> {
         match self {
-            GitProviderKind::Github(github) => {
-                github
-                    .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
-                    .await
-            }
-            GitProviderKind::Git(github) => {
-                github
+            GitProviderKind::Git(git) => {
+                git
                     .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
                     .await
             }
@@ -153,12 +143,11 @@ impl GitProvider for GitProviderKind {
 
 pub fn create_provider(url: String, commit: String) -> anyhow::Result<GitProviderKind> {
     // Note: Github does not support the `git archive`
-    if url.contains("github.com") {
-        return Ok(GitProviderKind::Github(Git::new(url, commit)?));
+    if url.contains("github.com") || url.contains("git@github.com") {
+        return Ok(GitProviderKind::Git(Git::new(url, commit)?));
     }
-    // todo implement git archive for other supported providers
 
-    info!("Unknown provider falling back to using default resolver");
+    info!("Unknown provider falling back to using default git resolver");
     Ok(GitProviderKind::Git(Git::new(url, commit)?))
 }
 
