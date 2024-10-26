@@ -3,11 +3,12 @@
 
 mod build;
 mod cli;
+mod common;
 mod git;
 mod init;
 mod update;
 
-use std::{env, process::exit};
+use std::process::exit;
 
 use build::build;
 use clap::Parser;
@@ -19,9 +20,7 @@ use update::update;
 
 #[tokio::main]
 async fn main() {
-    let is_debug = env::var("CONTAINERYARD_DEBUG")
-        .map(|v| v == "true")
-        .unwrap_or(false);
+    let is_debug = common::is_debug();
     if is_debug {
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::TRACE)
@@ -47,7 +46,7 @@ async fn main() {
         } else {
             eprintln!("Oops something went wrong.");
             eprintln!(
-                "For more info, try again with environment variable `CONTAINERYARD_DEBUG=true`."
+                "For more info, try again with environment variable `CONTAINERYARD_DEBUG` to anything but `0`."
             );
         }
         exit(1);

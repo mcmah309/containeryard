@@ -5,7 +5,10 @@ use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
 
-use crate::build::{RemoteModuleInfo, SourceInfoKind, CONTAINERFILE_NAME, MODULE_YAML_FILE_NAME};
+use crate::{
+    build::{RemoteModuleInfo, SourceInfoKind, CONTAINERFILE_NAME, MODULE_YAML_FILE_NAME},
+    common::{self, is_debug},
+};
 
 use super::{path_in_cache_dir, GitProvider, ModuleFilesData, ReferenceInfo};
 
@@ -145,10 +148,9 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let clone_command_exit = Command::new("git")
+            let clone_command_exit = maybe_log_output(Command::new("git"))
                 .args(["clone", &self.url])
                 .current_dir(&provider_git_cache_dir)
-                .stdout(Stdio::inherit())
                 .spawn()?
                 .wait()
                 .await;
@@ -165,10 +167,9 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let fetch_command_exit = Command::new("git")
+            let fetch_command_exit = maybe_log_output(Command::new("git"))
                 .args(["fetch", "--all", "--prune"])
                 .current_dir(&repo_dir)
-                .stdout(Stdio::inherit())
                 .spawn()?
                 .wait()
                 .await;
@@ -187,10 +188,9 @@ impl GitProvider for Git {
             self.commit,
             self.url
         );
-        let checkout_command_exit = Command::new("git")
+        let checkout_command_exit = maybe_log_output(Command::new("git"))
             .args(["checkout", &self.commit])
             .current_dir(&repo_dir)
-            .stdout(Stdio::inherit())
             .spawn()?
             .wait()
             .await;
@@ -279,6 +279,13 @@ fn extract_user_and_repo_from_http(url: &str) -> anyhow::Result<(String, String)
 }
 
 //************************************************************************//
+
+fn maybe_log_output(mut command: Command) -> Command {
+    if is_debug() {
+        command.stdout(Stdio::inherit());
+    }
+    command
+}
 
 // /// characters not allowed in dirs on windows and linux
 // fn replace_disallowed_dir_name_symbols(string: &str) -> String {
