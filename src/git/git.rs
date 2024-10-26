@@ -145,10 +145,10 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let clone_command_exit = Command::new("git") // Replace with your command
+            let clone_command_exit = Command::new("git")
                 .args(["clone", &self.url])
-                .current_dir(&provider_git_cache_dir) // Replace with any needed arguments
-                .stdout(Stdio::inherit()) // Pipe directly to stdout
+                .current_dir(&provider_git_cache_dir)
+                .stdout(Stdio::inherit())
                 .spawn()?
                 .wait()
                 .await;
@@ -167,14 +167,14 @@ impl GitProvider for Git {
             self.commit,
             self.url
         );
-        let checkout_command_exit = Command::new("git") // Replace with your command
+        let checkout_command_exit = Command::new("git")
             .args(["checkout", &self.commit])
-            .current_dir(&repo_dir) // Replace with any needed arguments
-            .stdout(Stdio::inherit()) // Pipe directly to stdout
+            .current_dir(&repo_dir)
+            .stdout(Stdio::inherit())
             .spawn()?
             .wait()
             .await;
-
+        
         // get file data
         let remote_file_path = repo_dir.join(&remote_path);
         if !remote_file_path.is_file() {

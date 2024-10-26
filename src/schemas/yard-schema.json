@@ -89,6 +89,28 @@
           ]
         }
       }
+    },
+    "hooks": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": "object",
+          "properties": {
+            "pre": {
+              "type": "string"
+            },
+            "post": {
+              "type": "string"
+            }
+          },
+          "anyOf": [
+            { "required": ["pre"] },
+            { "required": ["post"] }
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

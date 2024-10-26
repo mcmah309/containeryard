@@ -24,7 +24,7 @@ dirs = "5"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+duct_sh = "0.13"
 futures = "0.3"
 regex = "1"
 tera = "1"

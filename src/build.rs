@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 use const_format::formatcp;
 use jsonschema::{Draft, Validator};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tera::Tera;
 use tokio::fs;
 use tracing::trace;
@@ -21,7 +21,7 @@ pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
 pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
-    let parsed_yard_file = parse_yard_yaml(path)
+    let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path)
         .await
         .context(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME))?;
     let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch)
@@ -52,6 +52,12 @@ pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
                 .display()
         );
     }
+
+    if let Some(post_build_hook) = post_build_hook {
+        duct_sh::sh_dangerous(&post_build_hook)
+            .run()
+            .with_context(|| format!("Post-build hook `{post_build_hook}` Failed"))?;
+    }
     Ok(())
 }
 
@@ -76,28 +82,40 @@ pub struct YamlArgs {
 // Deserialized yard.yaml
 //************************************************************************//
 
-/// Created by using the yard-schema.json file and https://app.quicktype.io/ __has been modified__
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Check by creating using the yard-schema.json file and https://app.quicktype.io/ __has been modified__
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct YamlYard {
+    pub hooks: Option<YamlHooks>,
     pub inputs: YamlInputs,
     /// Containerfile name to config
     pub outputs: HashMap<String, Vec<YamlModuleType>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct YamlHooks {
+    pub build: YamlBuildHooks,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct YamlBuildHooks {
+    pub pre: Option<String>,
+    pub post: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct YamlInputs {
     pub modules: Option<HashMap<String, String>>,
     pub remotes: Option<Vec<YamlRemote>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct YamlRemote {
     pub commit: String,
     pub modules: HashMap<String, String>,
     pub url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum YamlModuleType {
     /// Inline `- Run ...`
@@ -286,7 +304,7 @@ pub struct ModuleFilesData {
 }
 
 /// parse yard.yaml and validate that all referenced modules are declared
-async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
+async fn parse_yard_yaml(path: &Path) -> anyhow::Result<(YardFile, Option<String>)> {
     let yard_schema: &'static str = include_str!("./schemas/yard-schema.json");
     let yard_schema: serde_json::Value =
         serde_json::from_str(yard_schema).expect("yard-module-schema.json is not valid json");
@@ -294,21 +312,35 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
         .with_draft(Draft::Draft7)
         .build(&yard_schema)
         .expect("yard-schema.json is not a valid json schema");
-
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
-    let yard_yaml_file_data = fs::read_to_string(&yard_file_path)
-        .await
-        .with_context(|| format!("Could read '{}'.", &yard_file_path.display()))?;
-    let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
-        .with_context(|| format!("{} is not valid yaml.", &yard_file_path.display()))?;
-    validate_against_schema(&compiled_schema, &yard_yaml)
-        .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
-    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
-        format!(
-            "Was able to serialize '{}', but was unable to convert to internal expected model.",
-            yard_file_path.display()
-        )
-    })?;
+
+    async fn load_yard_file(
+        compiled_schema: &Validator,
+        yard_file_path: &Path,
+    ) -> anyhow::Result<YamlYard> {
+        let yard_yaml_file_data = fs::read_to_string(yard_file_path)
+            .await
+            .with_context(|| format!("Could read '{}'.", yard_file_path.display()))?;
+        let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
+            .with_context(|| format!("{} is not valid yaml.", yard_file_path.display()))?;
+        validate_against_schema(compiled_schema, &yard_yaml)
+            .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
+        let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
+            format!(
+                "Was able to serialize '{}', but was unable to convert to internal expected model.",
+                yard_file_path.display()
+            )
+        })?;
+        Ok(yard_yaml)
+    }
+    let mut yard_yaml = load_yard_file(&compiled_schema, &yard_file_path).await?;
+    let pre_build_hook: Option<&str> = (|| yard_yaml.hooks.as_ref()?.build.pre.as_deref())();
+    if let Some(pre_build_hook) = pre_build_hook {
+        duct_sh::sh_dangerous(pre_build_hook)
+            .run()
+            .with_context(|| format!("Pre-build hook `{pre_build_hook}` Failed"))?;
+        yard_yaml = load_yard_file(&compiled_schema, &yard_file_path).await?;
+    }
 
     let mut input_remotes: Vec<RemoteModules> = Vec::new();
     if let Some(remotes) = yard_yaml.inputs.remotes {
@@ -345,11 +377,15 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
         }
         output_container_files.insert(containerfile_name, modules);
     }
-    Ok(YardFile {
-        input_remotes,
-        input_modules,
-        output_container_files,
-    })
+    let post_build_hook: Option<String> = (|| yard_yaml.hooks?.build.post)();
+    Ok((
+        YardFile {
+            input_remotes,
+            input_modules,
+            output_container_files,
+        },
+        post_build_hook,
+    ))
 }
 
 /// resolve and validate fields in the yard.yaml file

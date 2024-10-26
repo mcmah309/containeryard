@@ -1,5 +1,11 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
+hooks:
+  build:
+    pre: echo pre build hook
+    post: echo post build hook
+
+
 inputs:
   # modules:
   #     finalizer: local_modules/finalizer
