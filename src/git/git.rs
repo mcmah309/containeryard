@@ -165,14 +165,14 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let clone_command_exit = Command::new("git")
-                .args(["pull"])
+            let fetch_command_exit = Command::new("git")
+                .args(["fetch", "--all", "--prune"])
                 .current_dir(&repo_dir)
                 .stdout(Stdio::inherit())
                 .spawn()?
                 .wait()
                 .await;
-            if !clone_command_exit?.success() {
+            if !fetch_command_exit?.success() {
                 bail!(format!(
                     "Could not pull git repo `{}` to `{}`",
                     self.url,
@@ -197,8 +197,7 @@ impl GitProvider for Git {
         if !checkout_command_exit?.success() {
             bail!(format!(
                 "Could not checkout commit `{}` in repo `{}`",
-                self.commit,
-                self.url
+                self.commit, self.url
             ))
         }
 
