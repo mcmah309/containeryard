@@ -708,15 +708,14 @@ fn resolve_template_value(val: String) -> anyhow::Result<String> {
     // shell command
     if val.starts_with("$(") && val.ends_with(")") {
         let command = &val[2..val.len() - 1];
-        let output = duct_sh::sh_dangerous(command).run().map_err(|e| {
+        let output = duct_sh::sh_dangerous(command).read().map_err(|e| {
             anyhow!(
                 "Failed to execute command '{}' for template value: {}",
                 command,
                 e
             )
         })?;
-        let val = str::from_utf8(&output.stdout)?;
-        return Ok(val.trim().to_string());
+        return Ok(output.trim().to_string());
     }
     // env var
     if val.starts_with("$") {
