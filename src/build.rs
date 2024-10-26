@@ -494,12 +494,11 @@ async fn resolve_additional_files(
                     let local_download_path = local_download_path_root.join(&file_path);
                     if local_download_path.exists() && do_not_refetch {
                         println!(
-                            "Found '{}' locally and `--do-not-refetch` is set. Not fetching to ensure corrent version.",
+                            "Note: '{}' is not refetched since it already exists and `--do-not-refetch` is set.",
                             &local_download_path.display()
                         );
                         continue;
                     }
-                    is_local_absolute(&local_download_path)?;
                     let remote_file_path = format!("{}/{}", remote.path, file_path);
                     git_provider
                         .retrieve_file_and_put_at(&remote_file_path, &local_download_path)
@@ -573,6 +572,24 @@ async fn validate_schema_and_create_module_builders(
             .context("Failed to validate and create module builder.")?;
         modules.insert(name, module);
     }
+
+    for (index, (name1, module1)) in modules.iter().enumerate() {
+        for (name1, module2) in modules.iter().skip(index + 1) {
+            for required_file1 in &module1.required_files {
+                for required_file2 in &module2.required_files {
+                    if required_file1 == required_file2 {
+                        bail!(format!(
+                            "Required file '{}' is declared in both modules:\n{}\n{}\nIf put in the same place one would override the other.",
+                            required_file1,
+                            module1.source_info.source_location(),
+                            module2.source_info.source_location()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     return Ok(modules);
 }
 
@@ -597,6 +614,9 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
             let required_template_values = args.required.unwrap_or_default().into_iter().collect();
             let optional_template_values = args.optional.unwrap_or_default().into_iter().collect();
 
+            for required_file in required_files.iter() {
+                is_local_absolute(&PathBuf::from(required_file))?;
+            }
             Ok((
                 required_files,
                 required_template_values,
