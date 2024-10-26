@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use const_format::formatcp;
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use serde::{Deserialize, Serialize};
 use tera::Tera;
 use tokio::fs;
@@ -290,9 +290,9 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
     let yard_schema: &'static str = include_str!("./schemas/yard-schema.json");
     let yard_schema: serde_json::Value =
         serde_json::from_str(yard_schema).expect("yard-module-schema.json is not valid json");
-    let compiled_schema = JSONSchema::options()
+    let compiled_schema = Validator::options()
         .with_draft(Draft::Draft7)
-        .compile(&yard_schema)
+        .build(&yard_schema)
         .expect("yard-schema.json is not a valid json schema");
 
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
@@ -558,9 +558,9 @@ async fn validate_schema_and_create_module_builders(
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
     let yard_module_schema: serde_json::Value = serde_json::from_str(yard_module_schema)
         .expect("yard-module-schema.json is not valid json");
-    let compiled_schema = JSONSchema::options()
+    let compiled_schema = Validator::options()
         .with_draft(Draft::Draft7)
-        .compile(&yard_module_schema)
+        .build(&yard_module_schema)
         .expect("yard-module-schema.json is not a valid json schema");
     let validate_module_schema_fn =
         |yaml: &serde_yaml::Value| validate_against_schema(&compiled_schema, yaml);
@@ -638,22 +638,30 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
 //************************************************************************//
 
 fn validate_against_schema(
-    compiled_schema: &JSONSchema,
+    compiled_schema: &Validator,
     yaml: &serde_yaml::Value,
 ) -> anyhow::Result<()> {
     let yaml_as_json = serde_json::to_value(&yaml)
         .context("Could not convert to json for validation against the schema.")?;
     compiled_schema
         .validate(&yaml_as_json)
-        .map_err(|errors| {
-            let mut error_message = String::new();
-            for error in errors {
-                error_message.push_str(&format!(
-                    "Validation error: '{}'\n\tInstance path: '{}'\n\tSchema path: '{}'",
-                    error, error.instance_path, error.schema_path
-                ));
-            }
-            anyhow!(error_message)
+        .map_err(|error| {
+            let context = format!(
+                r#"Validation error: 
+
+                Issue: {}
+
+                Violation Instance: {}
+
+                Violation Path: {}
+
+                Schema Property Violated: {}"#,
+                &error.to_string(),
+                &error.instance,
+                &error.instance_path,
+                &error.schema_path
+            );
+            anyhow!(context)
         })
         .context("yaml does not follow the proper schema.")?;
     Ok(())
