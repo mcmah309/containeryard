@@ -35,6 +35,12 @@ outputs:
         email: $(git config --get user.email)
     - bash_flavor:
     - finalizer:
+
+hooks:
+  build:
+    # Command executed before the build. Will reload this file after the command is executed
+    pre: yard update
+    post: echo Done
 ```
 
 To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build .`.
@@ -63,6 +69,7 @@ args:
   required:
   optional:
     - version
+# Files to be pulled in with this module
 required_files:
 ```
 
