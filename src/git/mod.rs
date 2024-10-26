@@ -1,70 +1,216 @@
+mod git;
 mod github;
 
-use std::{collections::HashMap, path::Path};
-
-use crate::{
-    build::{IntermediateRemote, ModuleFilesData},
-    common::UserMessageError,
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
 };
-use github::Github;
+
+use crate::build::ModuleFilesData;
+use git::Git;
+use tokio::fs;
+use tracing::{info, trace};
+
+/// Reference information for a git provider
+#[derive(Debug)]
+pub struct ReferenceInfo<'a> {
+    provider: &'a str,
+    repo_owner: &'a str,
+    repo_name: &'a str,
+    url: &'a str,
+    commit: &'a str,
+}
 
 pub trait GitProvider {
-    /// Gets the information from the provider or the cache.
-    async fn get_module_files(
+    /// Downloads the module (Containerfile and yard-module.yaml) or gets from cache at the
+    /// specified paths, and returns the raw data.
+    async fn retrieve_module(
         &self,
-        remote: &IntermediateRemote,
+        name_to_path: HashMap<String, String>,
     ) -> anyhow::Result<HashMap<String, ModuleFilesData>>;
 
-    async fn download_file(
+    /// Returns the reference information for this provider
+    fn reference_info<'a>(&'a self) -> ReferenceInfo<'a>;
+
+    /// Downloads the file and returns the data as a [String]
+    async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String>;
+
+    /// Downloads the file or gets from cache and returns the data as a [String]. Caches locally if the
+    /// data is downloaded for the first time
+    async fn retrieve_data_locally_or_extract_from_remote_and_cache_locally(
         &self,
-        owner: &str,
-        repo: &str,
-        commit: &str,
         remote_path: &str,
-        local_download_path: &Path,
-    ) -> anyhow::Result<()>;
-}
+    ) -> anyhow::Result<String> {
+        // Check if file is at cache, if so copy over
+        let remote_path_as_path = PathBuf::from(remote_path);
+        let reference_info = self.reference_info();
+        let ReferenceInfo {
+            provider,
+            repo_owner,
+            repo_name,
+            url,
+            commit,
+        } = reference_info;
 
-pub enum GitProviderKind {
-    Github(Github),
-}
-
-impl GitProvider for GitProviderKind {
-    async fn get_module_files(
-        &self,
-        remote: &IntermediateRemote,
-    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
-        match self {
-            GitProviderKind::Github(github) => github.get_module_files(remote).await,
+        trace!("Checking cache for `{:?}`", reference_info);
+        let file_data = retrieve_file_from_cache(
+            &remote_path_as_path,
+            &provider,
+            &repo_owner,
+            &repo_name,
+            &commit,
+        )?;
+        if let Some(file_data) = file_data {
+            trace!("`{:?}` found in cache", reference_info);
+            return Ok(file_data);
         }
+
+        trace!(
+            "`{:?}` not found in cache, downloading from remote",
+            reference_info
+        );
+        let file_data = self.extract_remote_path_data(&remote_path).await?;
+
+        trace!("Saving `{:?}` downloaded from remote", reference_info);
+        save_to_cache(
+            &file_data,
+            &remote_path_as_path,
+            &provider,
+            &repo_owner,
+            &repo_name,
+            &commit,
+        )?;
+        trace!("`{:?}` saved to cache", reference_info);
+
+        Ok(file_data)
     }
 
-    async fn download_file(
+    /// Downloads the file or gets from cache, and ensures it is available at `local_download_path`
+    async fn retrieve_file_and_put_at(
         &self,
-        owner: &str,
-        repo: &str,
-        commit: &str,
         remote_path: &str,
         local_download_path: &Path,
     ) -> anyhow::Result<()> {
+        let file_data = self
+            .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
+            .await?;
+        fs::create_dir_all(local_download_path.parent().unwrap()).await?;
+        fs::write(local_download_path, file_data).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum GitProviderKind {
+    Github(Git), // todo remove or more custom impl?
+    /// Fallback (git clone)
+    Git(Git),
+}
+
+impl GitProvider for GitProviderKind {
+    async fn retrieve_module(
+        &self,
+        name_to_path: HashMap<String, String>,
+    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
+        match self {
+            GitProviderKind::Github(github) => github.retrieve_module(name_to_path).await,
+            GitProviderKind::Git(github) => github.retrieve_module(name_to_path).await,
+        }
+    }
+
+    fn reference_info<'a>(&'a self) -> ReferenceInfo<'a> {
+        match self {
+            GitProviderKind::Github(github) => github.reference_info(),
+            GitProviderKind::Git(github) => github.reference_info(),
+        }
+    }
+
+    async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String> {
+        match self {
+            GitProviderKind::Github(github) => github.extract_remote_path_data(remote_path).await,
+            GitProviderKind::Git(github) => github.extract_remote_path_data(remote_path).await,
+        }
+    }
+
+    async fn retrieve_data_locally_or_extract_from_remote_and_cache_locally(
+        &self,
+        remote_path: &str,
+    ) -> anyhow::Result<String> {
         match self {
             GitProviderKind::Github(github) => {
                 github
-                    .download_file(owner, repo, commit, remote_path, local_download_path)
+                    .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
+                    .await
+            }
+            GitProviderKind::Git(github) => {
+                github
+                    .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
                     .await
             }
         }
     }
 }
 
-pub fn git_provider_from_url(url: &str) -> anyhow::Result<GitProviderKind> {
+pub fn create_provider(url: String, commit: String) -> anyhow::Result<GitProviderKind> {
     // Note: Github does not support the `git archive`
     if url.contains("github.com") {
-        return Ok(GitProviderKind::Github(Github::new()));
+        return Ok(GitProviderKind::Github(Git::new(url, commit)?));
     }
-    // Note: As a general case we can add something like e.g.`git archive --remote=https://github.com/mcmah309/indices.git a55f1eae8789123ee7de5aff603445da4d6e387d  Cargo.toml`
-    anyhow::bail!(UserMessageError::new(format!(
-        "A git provider for '{}' has not been implemented yet. Please make a PR for your use case if there isn't already one :)",
-        url
-    )))
+    // todo implement git archive for other supported providers
+
+    info!("Unknown provider falling back to using default resolver");
+    Ok(GitProviderKind::Git(Git::new(url, commit)?))
+}
+
+// returns none if file not found
+pub fn retrieve_file_from_cache(
+    file_path: &Path,
+    provider: &str,
+    owner: &str,
+    repo_name: &str,
+    commit: &str,
+) -> anyhow::Result<Option<String>> {
+    let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
+    if cache_file_path.exists() {
+        Ok(Some(std::fs::read_to_string(cache_file_path)?))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn save_to_cache(
+    data: &str,
+    file_path: &Path,
+    provider: &str,
+    owner: &str,
+    repo_name: &str,
+    commit: &str,
+) -> anyhow::Result<()> {
+    let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
+    if !cache_file_path.exists() {
+        if let Some(parent) = cache_file_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        std::fs::write(cache_file_path, data)?;
+    }
+    Ok(())
+}
+
+pub fn path_in_cache_dir(
+    file_path: &Path,
+    provider: &str,
+    owner: &str,
+    repo_name: &str,
+    commit: &str,
+) -> PathBuf {
+    dirs::cache_dir()
+        .expect("Could not determine cache directory of platform")
+        .join("extracted_files")
+        .join(&provider)
+        .join(&owner)
+        .join(&repo_name)
+        .join(&commit)
+        .join(&file_path)
 }

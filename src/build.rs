@@ -12,10 +12,11 @@ use jsonschema::{Draft, JSONSchema};
 use serde::{Deserialize, Serialize};
 use tera::Tera;
 use tokio::fs;
+use tracing::trace;
 
 use crate::{
     common::UserMessageError,
-    git::{git_provider_from_url, GitProvider},
+    git::{create_provider, GitProvider},
 };
 
 pub const MODULE_YAML_FILE_NAME: &str = "yard-module.yaml";
@@ -122,17 +123,17 @@ pub enum YamlModuleType {
 //************************************************************************//
 
 #[derive(Debug, Clone, Default)]
-struct IntermediateYardFile {
-    input_remotes: Vec<IntermediateRemote>,
+struct YardFile {
+    input_remotes: Vec<RemoteModules>,
     /// Module name to path on local
     input_modules: HashMap<String, String>,
     /// Containerfile name to included modules
-    output_container_files: HashMap<String, Vec<IntermediateUseModule>>,
+    output_container_files: HashMap<String, Vec<UseModule>>,
 }
 
 /// Reference to a remote and containing modules
 #[derive(Debug, Clone, Default)]
-pub struct IntermediateRemote {
+pub struct RemoteModules {
     pub url: String,
     pub commit: String,
     pub name_to_path: HashMap<String, String>,
@@ -140,20 +141,20 @@ pub struct IntermediateRemote {
 
 /// Reference to an input module or inline
 #[derive(Debug, Clone)]
-enum IntermediateUseModule {
-    Inline(IntermediateUseInlineModule),
-    Input(IntermediateUseInputModule),
+enum UseModule {
+    Inline(UseInlineModule),
+    Input(UseInputModule),
 }
 
 /// Inline module
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-struct IntermediateUseInlineModule {
+struct UseInlineModule {
     value: String,
 }
 
 /// Reference to an input module
 #[derive(Debug, Clone, Default)]
-struct IntermediateUseInputModule {
+struct UseInputModule {
     name: String,
     template_vars: HashMap<String, String>,
 }
@@ -238,8 +239,8 @@ impl SourceInfo for LocalModuleInfo {
 pub struct RemoteModuleInfo {
     /// original url
     pub url: String,
-    pub owner: String,
-    pub repo: String,
+    pub repo_owner: String,
+    pub repo_name: String,
     pub commit: String,
     pub path: String,
     /// Module name
@@ -250,7 +251,7 @@ impl SourceInfo for RemoteModuleInfo {
     fn source_location(&self) -> String {
         format!(
             "Remote url: '{}', owner: '{}', repo: '{}', commit: '{}', path: '{}', name: '{}'",
-            self.url, self.owner, self.repo, self.commit, self.path, self.name
+            self.url, self.repo_owner, self.repo_name, self.commit, self.path, self.name
         )
     }
 }
@@ -297,7 +298,7 @@ pub struct ModuleFilesData {
 }
 
 /// parse yard.yaml and validate that all referenced modules are declared
-async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
+async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
     let yard_schema: &'static str = include_str!("./schemas/yard-schema.json");
     let yard_schema: serde_json::Value =
         serde_json::from_str(yard_schema).expect("yard-module-schema.json is not valid json");
@@ -322,10 +323,10 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         .to_string(),
     ))?;
 
-    let mut input_remotes: Vec<IntermediateRemote> = Vec::new();
+    let mut input_remotes: Vec<RemoteModules> = Vec::new();
     if let Some(remotes) = yard_yaml.inputs.remotes {
         for remote in remotes {
-            input_remotes.push(IntermediateRemote {
+            input_remotes.push(RemoteModules {
                 url: remote.url,
                 commit: remote.commit,
                 name_to_path: remote.modules,
@@ -333,15 +334,13 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         }
     }
     let input_modules = yard_yaml.inputs.modules.unwrap_or_default();
-    let mut output_container_files: HashMap<String, Vec<IntermediateUseModule>> = HashMap::new();
+    let mut output_container_files: HashMap<String, Vec<UseModule>> = HashMap::new();
     for (containerfile_name, output) in yard_yaml.outputs {
-        let mut modules: Vec<IntermediateUseModule> = Vec::new();
+        let mut modules: Vec<UseModule> = Vec::new();
         for module in output {
             match module {
                 YamlModuleType::Inline(value) => {
-                    modules.push(IntermediateUseModule::Inline(IntermediateUseInlineModule {
-                        value,
-                    }));
+                    modules.push(UseModule::Inline(UseInlineModule { value }));
                 }
                 YamlModuleType::InputRef(module_ref) => {
                     assert!(
@@ -349,7 +348,7 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
                         "Internal model is wrong. This should be `- module_name: ...`"
                     );
                     for (module_name, template_vars) in module_ref {
-                        modules.push(IntermediateUseModule::Input(IntermediateUseInputModule {
+                        modules.push(UseModule::Input(UseInputModule {
                             name: module_name,
                             template_vars: template_vars.unwrap_or_default(),
                         }));
@@ -359,7 +358,7 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
         }
         output_container_files.insert(containerfile_name, modules);
     }
-    Ok(IntermediateYardFile {
+    Ok(YardFile {
         input_remotes,
         input_modules,
         output_container_files,
@@ -367,11 +366,8 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<IntermediateYardFile> {
 }
 
 /// resolve and validate fields in the yard.yaml file
-async fn resolve_yard_yaml(
-    yard_yaml: IntermediateYardFile,
-    path: &Path,
-) -> anyhow::Result<Containerfiles> {
-    let IntermediateYardFile {
+async fn resolve_yard_yaml(yard_yaml: YardFile, path: &Path) -> anyhow::Result<Containerfiles> {
+    let YardFile {
         input_remotes,
         input_modules,
         output_container_files,
@@ -441,7 +437,7 @@ async fn resolve_yard_yaml(
         let mut modules_for_container_file: Vec<Module> = Vec::new();
         for module_declaration in module_declarations {
             match module_declaration {
-                IntermediateUseModule::Inline(inline) => {
+                UseModule::Inline(inline) => {
                     modules_for_container_file.push(
                         ModuleBuilder {
                             containerfile_data: inline.value.clone(),
@@ -456,7 +452,7 @@ async fn resolve_yard_yaml(
                         .build()?,
                     );
                 }
-                IntermediateUseModule::Input(declared_module) => {
+                UseModule::Input(declared_module) => {
                     let module = modules.get(&declared_module.name).ok_or_else(|| {
                         UserMessageError::new(format!(
                             "Module '{}' is not declared as an input in the '{}' file.",
@@ -480,12 +476,14 @@ async fn resolve_yard_yaml(
 }
 
 async fn download_remotes(
-    remotes: Vec<IntermediateRemote>,
+    remotes: Vec<RemoteModules>,
 ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
     let mut name_to_module_file_data: HashMap<String, ModuleFilesData> = HashMap::new();
     for remote in remotes {
-        let git_provider = git_provider_from_url(&remote.url)?;
-        let name_to_module_files_data_part = git_provider.get_module_files(&remote).await?;
+        let git_provider = create_provider(remote.url, remote.commit)?;
+        trace!("Identified provider '{:?}'", git_provider);
+        let name_to_module_files_data_part =
+            git_provider.retrieve_module(remote.name_to_path).await?;
         name_to_module_file_data.extend(name_to_module_files_data_part);
     }
     Ok(name_to_module_file_data)
@@ -502,7 +500,7 @@ async fn resolve_additional_files(
                 validate_path_references(&[local_file_path])?;
             }
             SourceInfoKind::RemoteModuleInfo(ref remote) => {
-                let git_provider = git_provider_from_url(&remote.url)?;
+                let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
                 for file_path in module.required_files.iter() {
                     let local_download_path = local_download_path_root.join(&file_path);
                     if local_download_path.exists() {
@@ -515,13 +513,7 @@ async fn resolve_additional_files(
                     is_local_absolute(&local_download_path)?;
                     let remote_file_path = format!("{}/{}", remote.path, file_path);
                     git_provider
-                        .download_file(
-                            &remote.owner,
-                            &remote.repo,
-                            &remote.commit,
-                            &remote_file_path,
-                            &local_download_path,
-                        )
+                        .retrieve_file_and_put_at(&remote_file_path, &local_download_path)
                         .await
                         .with_context(|| {
                             UserMessageError::new(format!(
