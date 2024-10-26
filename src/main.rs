@@ -36,7 +36,7 @@ async fn main() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
-        Commands::Build { path } => build(&path).await,
+        Commands::Build { path, do_not_refetch } => build(&path, do_not_refetch).await,
         Commands::Init { path } => init(&path).await,
         Commands::Update { path } => update(&path),
     };

@@ -23,11 +23,11 @@ pub const MODULE_YAML_FILE_NAME: &str = "yard-module.yaml";
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
-pub async fn build(path: &Path) -> anyhow::Result<()> {
+pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
     let parsed_yard_file = parse_yard_yaml(path).await.with_context(|| {
         UserMessageError::new(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME).to_string())
     })?;
-    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path)
+    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch)
         .await
         .with_context(|| {
             UserMessageError::new(
@@ -366,7 +366,11 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
 }
 
 /// resolve and validate fields in the yard.yaml file
-async fn resolve_yard_yaml(yard_yaml: YardFile, path: &Path) -> anyhow::Result<Containerfiles> {
+async fn resolve_yard_yaml(
+    yard_yaml: YardFile,
+    path: &Path,
+    do_not_refetch: bool,
+) -> anyhow::Result<Containerfiles> {
     let YardFile {
         input_remotes,
         input_modules,
@@ -429,7 +433,7 @@ async fn resolve_yard_yaml(yard_yaml: YardFile, path: &Path) -> anyhow::Result<C
             .context("Could not resolve modules.")?;
 
     // Resolve
-    resolve_additional_files(&modules, path)
+    resolve_additional_files(&modules, path, do_not_refetch)
         .await
         .context("Could not resolve additional required files")?;
     let mut containerfiles_to_parts: HashMap<String, Vec<Module>> = HashMap::new();
@@ -492,6 +496,7 @@ async fn download_remotes(
 async fn resolve_additional_files(
     name_to_module: &HashMap<String, ModuleBuilder>,
     local_download_path_root: &Path,
+    do_not_refetch: bool,
 ) -> anyhow::Result<()> {
     for (name, module) in name_to_module {
         match module.source_info {
@@ -503,9 +508,9 @@ async fn resolve_additional_files(
                 let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
                 for file_path in module.required_files.iter() {
                     let local_download_path = local_download_path_root.join(&file_path);
-                    if local_download_path.exists() {
+                    if local_download_path.exists() && do_not_refetch {
                         println!(
-                            "Found '{}' locally. Not downloading.",
+                            "Found '{}' locally and `--do-not-refetch` is set. Not fetching to ensure corrent version.",
                             &local_download_path.display()
                         );
                         continue;
