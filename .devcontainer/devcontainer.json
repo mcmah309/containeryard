@@ -17,6 +17,7 @@
 				"tamasfe.even-better-toml",
 				"waderyan.gitblame",
 				"redhat.vscode-yaml",
+				"fabiospampinato.vscode-git-history",
 				// "oderwat.indent-rainbow",
 			]
 		}
