@@ -86,7 +86,7 @@ Note: `yard` is the cli tool for ContainerYard.
 ### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
 
 ```bash
-RELEASE_VER=<INSERT_CURRENT_VERSION> # e.g. RELEASE_VER='v0.2.5'
+RELEASE_VER=<INSERT_CURRENT_VERSION> # e.g. RELEASE_VER='v0.2.6'
 deb_file="containeryard_$(echo $RELEASE_VER | sed 's/^v//')-1_amd64.deb"
 curl -LO https://github.com/mcmah309/containeryard/releases/download/$RELEASE_VER/$deb_file
 sudo dpkg -i "$deb_file"
