@@ -7,7 +7,6 @@ use std::{io, str};
 use anyhow::{anyhow, bail, Context};
 
 use crate::build::YARD_YAML_FILE_NAME;
-use crate::common::UserMessageError;
 
 /// Updates the `yard.yaml` file's "commit: <sha>" for each entry in the remote. Does not modify any other parts of the file
 /// Even saves comments if they exist on the comment line e.g. "commit: <sha> comment"
@@ -37,9 +36,8 @@ pub fn update(path: &Path) -> anyhow::Result<()> {
                     );
                 }
                 let current_repo_url = captures.get(1).map_or("", |m| m.as_str()).to_string();
-                latest_commit = get_latest_commit_sha(&current_repo_url).context(
-                    UserMessageError::new(format!("Line number '{}'", line_number)),
-                )?
+                latest_commit = get_latest_commit_sha(&current_repo_url)
+                    .with_context(|| format!("Line number '{}'", line_number))?
             }
 
             // Check if the line matches the commit pattern

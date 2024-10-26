@@ -14,47 +14,35 @@ use tera::Tera;
 use tokio::fs;
 use tracing::trace;
 
-use crate::{
-    common::UserMessageError,
-    git::{create_provider, GitProvider},
-};
+use crate::git::{create_provider, GitProvider};
 
 pub const MODULE_YAML_FILE_NAME: &str = "yard-module.yaml";
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
 pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
-    let parsed_yard_file = parse_yard_yaml(path).await.with_context(|| {
-        UserMessageError::new(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME).to_string())
-    })?;
+    let parsed_yard_file = parse_yard_yaml(path)
+        .await
+        .context(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME))?;
     let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch)
         .await
-        .with_context(|| {
-            UserMessageError::new(
-                formatcp!(
-                    "Could not resolve all the fields in the parsed '{}' file",
-                    YARD_YAML_FILE_NAME
-                )
-                .to_string(),
-            )
-        })?;
+        .context(formatcp!(
+            "Could not resolve all the fields in the parsed '{}' file",
+            YARD_YAML_FILE_NAME
+        ))?;
     if resolved_yard_file.name_to_module.is_empty() {
-        bail!(UserMessageError::new(
-            "No modules were resolved.".to_string()
-        ))
+        bail!("No modules were resolved.")
     }
-    let outputs = apply_templates(resolved_yard_file)
-        .with_context(|| UserMessageError::new("Could not apply templates".to_string()))?;
+    let outputs =
+        apply_templates(resolved_yard_file).context("Could not apply templates".to_string())?;
     if outputs.is_empty() {
-        bail!(UserMessageError::new(
-            "No Containerfiles where created.".to_string()
-        ))
+        bail!("No Containerfiles where created.")
     }
     for (file_name, content) in outputs {
         let file_path = path.join(&file_name);
-        fs::write(&file_path, content).await.with_context(|| {
-            UserMessageError::new(format!("Could not write to '{}'.", &file_name).to_string())
-        })?;
+        fs::write(&file_path, content)
+            .await
+            .with_context(|| format!("Could not write to '{}'.", &file_name))?;
         println!(
             "Created '{}' at '{}",
             &file_name,
@@ -177,22 +165,22 @@ impl ModuleBuilder {
     fn build(self) -> anyhow::Result<Module> {
         for var in self.required_template_values.iter() {
             if !self.provided_template_values.contains_key(var) {
-                bail!(UserMessageError::new(format!(
+                bail!(format!(
                     "Required variable '{}' not found for:\n{}",
                     var,
                     self.source_info.source_location()
-                )));
+                ));
             }
         }
         for (var, val) in self.provided_template_values.iter() {
             if !self.required_template_values.contains(var)
                 && !self.optional_template_values.contains(var)
             {
-                bail!(UserMessageError::new(format!(
+                bail!(format!(
                     "Provided template variable '{}' not found in the module for:\n{}",
                     var,
                     self.source_info.source_location()
-                )));
+                ));
             }
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
@@ -308,20 +296,19 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<YardFile> {
         .expect("yard-schema.json is not a valid json schema");
 
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
-    let yard_yaml_file_data = fs::read_to_string(&yard_file_path).await.with_context(|| {
-        UserMessageError::new(format!("Could read '{}'.", &yard_file_path.display()).to_string())
-    })?;
+    let yard_yaml_file_data = fs::read_to_string(&yard_file_path)
+        .await
+        .with_context(|| format!("Could read '{}'.", &yard_file_path.display()))?;
     let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
         .with_context(|| format!("{} is not valid yaml.", &yard_file_path.display()))?;
     validate_against_schema(&compiled_schema, &yard_yaml)
         .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
-    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).context(UserMessageError::new(
+    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
         format!(
             "Was able to serialize '{}', but was unable to convert to internal expected model.",
             yard_file_path.display()
         )
-        .to_string(),
-    ))?;
+    })?;
 
     let mut input_remotes: Vec<RemoteModules> = Vec::new();
     if let Some(remotes) = yard_yaml.inputs.remotes {
@@ -381,10 +368,7 @@ async fn resolve_yard_yaml(
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_modules {
         if module_names_are_unique_check.contains(&name) {
-            bail!(UserMessageError::new(format!(
-                "A module with name '{}' is declared twice.",
-                name
-            )));
+            bail!(format!("A module with name '{}' is declared twice.", name));
         }
         module_names_are_unique_check.insert(name.clone());
         let containerfile_file = PathBuf::from(&path).join(CONTAINERFILE_NAME);
@@ -414,17 +398,17 @@ async fn resolve_yard_yaml(
     }
     for (name, path) in input_remotes.iter().flat_map(|e| e.name_to_path.iter()) {
         if module_names_are_unique_check.contains(&*name) {
-            anyhow::bail!(UserMessageError::new(format!(
+            anyhow::bail!(format!(
                 "A module named '{}' is declared more than once",
                 name
-            )))
+            ))
         }
     }
 
     let remote_name_to_module_files: HashMap<String, ModuleFilesData> =
-        download_remotes(input_remotes).await.with_context(|| {
-            UserMessageError::new("Failed to download some remotes.".to_string())
-        })?;
+        download_remotes(input_remotes)
+            .await
+            .context("Failed to download some remotes.")?;
     local_name_to_module_files_data.extend(remote_name_to_module_files);
     let name_to_module_files_data = local_name_to_module_files_data;
     let modules: HashMap<String, ModuleBuilder> =
@@ -458,7 +442,7 @@ async fn resolve_yard_yaml(
                 }
                 UseModule::Input(declared_module) => {
                     let module = modules.get(&declared_module.name).ok_or_else(|| {
-                        UserMessageError::new(format!(
+                        anyhow!(format!(
                             "Module '{}' is not declared as an input in the '{}' file.",
                             declared_module.name, YARD_YAML_FILE_NAME
                         ))
@@ -521,11 +505,11 @@ async fn resolve_additional_files(
                         .retrieve_file_and_put_at(&remote_file_path, &local_download_path)
                         .await
                         .with_context(|| {
-                            UserMessageError::new(format!(
+                            format!(
                                 "Could not download '{}' at\n{}",
                                 &file_path,
                                 remote.source_location()
-                            ))
+                            )
                         })?;
                 }
             }
@@ -541,10 +525,10 @@ fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> anyhow::Result<()> {
         let path = PathBuf::from(file);
         is_local_absolute(&path)?;
         if !path.exists() {
-            bail!(UserMessageError::new(format!(
+            bail!(format!(
                 "Path '{}' does not exist, but it should at this point.",
                 file.display()
-            )));
+            ));
         }
     }
     Ok(())
@@ -553,10 +537,10 @@ fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> anyhow::Result<()> {
 /// No "~" or ".."
 fn is_local_absolute(path: &Path) -> anyhow::Result<()> {
     let error = || {
-        UserMessageError::new(format!(
+        format!(
             "Path '{}' is not valid. Paths must be relative containing no '~' or '..' components.",
             path.display()
-        ))
+        )
     };
     for component in path.components() {
         match component {
@@ -586,9 +570,7 @@ async fn validate_schema_and_create_module_builders(
     for (name, module_files) in name_to_module_files_data {
         let module = validate_and_create_module_builder(module_files, validate_module_schema_fn)
             .await
-            .with_context(|| {
-                UserMessageError::new("Failed to validate and create module builder.".to_string())
-            })?;
+            .context("Failed to validate and create module builder.")?;
         modules.insert(name, module);
     }
     return Ok(modules);
@@ -621,9 +603,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
                 optional_template_values,
             ))
         })()
-        .context(UserMessageError::new(
-            module_files.source_info.source_location(),
-        ))?;
+        .with_context(|| module_files.source_info.source_location())?;
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
@@ -653,11 +633,9 @@ fn validate_against_schema(
                     error, error.instance_path, error.schema_path
                 ));
             }
-            UserMessageError::new(error_message)
+            anyhow!(error_message)
         })
-        .with_context(|| {
-            UserMessageError::new("yaml does not follow the proper schema.".to_string())
-        })?;
+        .context("yaml does not follow the proper schema.")?;
     Ok(())
 }
 
@@ -722,10 +700,10 @@ fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
             let rendered_part = match rendered_part {
                 Ok(val) => val,
                 Err(e) => Err(e).with_context(|| {
-                    UserMessageError::new(format!(
+                    format!(
                         "Could not render template for Containerfile part found at:\n{}",
                         included_module.source_info.source_location(),
-                    ))
+                    )
                 })?,
             };
             container_file_resolved_parts.push(rendered_part);

@@ -1,25 +1,13 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    process::Stdio,
-};
+use std::{collections::HashMap, path::PathBuf, process::Stdio};
 
 use anyhow::{anyhow, bail, Context};
 use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
 
-use crate::{
-    build::{
-        RemoteModuleInfo, SourceInfoKind, CONTAINERFILE_NAME, MODULE_YAML_FILE_NAME,
-    },
-    common::UserMessageError,
-};
+use crate::build::{RemoteModuleInfo, SourceInfoKind, CONTAINERFILE_NAME, MODULE_YAML_FILE_NAME};
 
-use super::{
-    path_in_cache_dir, GitProvider, ModuleFilesData,
-    ReferenceInfo,
-};
+use super::{path_in_cache_dir, GitProvider, ModuleFilesData, ReferenceInfo};
 
 /// Uses local `git` instance to clone and resolve references.
 #[derive(Debug)]
@@ -139,11 +127,11 @@ impl GitProvider for Git {
         let mut will_clone = false;
         if repo_dir.is_dir() {
             if !repo_dir.join(".git").is_dir() {
-                bail!(UserMessageError::new(format!(
+                bail!(format!(
                     "Cached directory for repo `{}` exists at `{}`, but it is not a git directory.",
                     self.url,
                     repo_dir.to_str().unwrap_or("")
-                )))
+                ))
             }
             trace!("Found a git cloned repo for `{}`", self.url,);
         } else {
@@ -165,11 +153,11 @@ impl GitProvider for Git {
                 .wait()
                 .await;
             if !clone_command_exit?.success() {
-                bail!(UserMessageError::new(format!(
+                bail!(format!(
                     "Could not clone git repo `{}` to `{}`",
                     self.url,
                     provider_git_cache_dir.to_str().unwrap_or("")
-                )))
+                ))
             }
         }
 
@@ -190,10 +178,10 @@ impl GitProvider for Git {
         // get file data
         let remote_file_path = repo_dir.join(&remote_path);
         if !remote_file_path.is_file() {
-            bail!(UserMessageError::new(format!(
+            bail!(format!(
                 "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
                 &remote_path, &self.url, &self.commit
-            )))
+            ))
         }
 
         let file_data = fs::read_to_string(remote_file_path)
@@ -219,9 +207,9 @@ fn url_to_repo_info(url: &str) -> anyhow::Result<RepoInfo> {
     } else if url.starts_with("http") {
         (owner, name) = extract_user_and_repo_from_http(url)?;
     } else {
-        bail!(UserMessageError::new(format!(
+        bail!(format!(
             "Unknown url type for `{url}`. Expected to start with `git@` or `http`"
-        )))
+        ))
     }
     let provider;
     if url.contains("github.com") {
