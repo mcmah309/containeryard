@@ -4,11 +4,12 @@
 [<img alt="crates.io" src="https://img.shields.io/crates/v/containeryard.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/containeryard)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-containeryard-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/containeryard)
 
-ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles).
+ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers.
 
-ContainerYard breaks Containerfiles into modules. Modules represent some specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. Modules also support [Tera](https://keats.github.io/tera/docs/#templates) templating.
+ContainerYard breaks Containerfiles into [modules](#declaring-a-simple-module). Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. While a `yard.yaml` file composes modules into Containerfiles.
 
-A `yard.yaml` file is used to compose modules into Containerfiles.
+## yard.yaml
+
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
@@ -47,24 +48,16 @@ hooks:
     post: echo Done
 ```
 
-To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build .`.
+To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
 Which in the above case, will output a single Containerfile to your current directory.
 
 ## Declaring A Simple Module
 
-A module consists of a [Tera](https://keats.github.io/tera/docs/#templates) template named `Containerfile` and a `yard-module.yaml` file 
-that defines configuration options and dependencies of the template.
+Modules represent some specific functionality of a container.
+A module consists of a `yard-module.yaml` file and a `Containerfile`.
 
-**Containerfile**
-```Containerfile
-FROM alpine:{{ version | default (value="latest") }}
-
-RUN apk update \
-    && apk upgrade \
-    && apk add --no-cache ca-certificates \
-    && update-ca-certificates
-```
-**yard-module.yaml**
+### yard-module.yaml
+`yard-module.yaml` defines the configuration options of the `Containerfile`.
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
@@ -76,8 +69,63 @@ args:
 # Files to be pulled in with this module
 required_files:
 ```
+`yard.yaml` provides the values for `args:` declared in a `yard-module.yaml`.
+e.g.
+```yaml
+inputs:
+  modules:
+    module: path/to/module
+
+outputs:
+  Containerfile:
+    - module:
+        version: "3.20.0"
+```
+
+### Containerfile
+`Containerfile` is the feature/functionality of the module.
+```Containerfile
+FROM alpine:{{ version | default (value="latest") }}
+
+RUN apk update \
+    && apk upgrade \
+    && apk add --no-cache ca-certificates \
+    && update-ca-certificates
+```
+`Containerfile` (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/))
+is treated first as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
+
+Thus combining the examples from this section, the output for the final component would be
+```Containerfile
+FROM alpine:3.20.0
+
+RUN apk update \
+    && apk upgrade \
+    && apk add --no-cache ca-certificates \
+    && update-ca-certificates
+```
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
+
+## Why Use ContainerYard?
+
+Developers constantly rewrite the same Containerfile/Dockerfile configs. Besides taking away developer time, 
+these configs become hard to maintain/upgrade and adding new features feels like starting from scratch again.
+With ContainerYard, you can write your config once and easily reuse and incrementally improve it over time.
+Users can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
+Want Flutter? Do the same. Need the latest version? Easily upgrade with `yard update` or just modify the commit line.
+With ContainerYard you should never have to define certain Containerfile configs again. But
+if you do want to do something custom, ContainerYard does not get in your way, everything is Containerfile based 
+and the output is a pure Containerfile. No need to learn a complex tool, no need to re-invent the wheel, Containerfiles 
+and Tera templates are powerful enough. Just let ContainerYard be the glue.
+
+## Why Use Container Yard Over Nix Flakes
+
+Think Nix flakes meets Containerfiles (aka Dockerfiles).
+
+Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different package managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
+
+Container Yard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
 
 ## Installation
 
@@ -98,24 +146,6 @@ dpkg -i "$deb_file"
 cargo install containeryard
 ```
 Consider adding `--profile dist` for a longer compile time but a more optimal build.
-
-## Why Use ContainerYard?
-
-Developers constantly rewrite the same Containerfile/Dockerfile configs. Besides taking away developer time, 
-these configs become hard to maintain/upgrade and adding new features feels like starting from scratch again.
-With ContainerYard, you can write your config once and easily reuse and incrementally improve it over time.
-Users can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
-Want Flutter? Do the same. Need the latest version? Easily upgrade with `yard update` or just modify the commit line.
-With ContainerYard you should never have to define certain Containerfile configs again. But
-if you do want to do something custom, ContainerYard does not get in your way, everything is Containerfile based 
-and the output is a pure Containerfile. No need to learn a complex tool, no need to re-invent the wheel, Containerfiles 
-and Tera templates are powerful enough. Just let ContainerYard be the glue.
-
-## Why Use Container Yard Over Nix Flakes
-
-Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different package managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
-
-Container Yard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
 
 ## Contributing
 
