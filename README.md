@@ -103,9 +103,10 @@ Consider adding `--profile dist` for a longer compile time but a more optimal bu
 
 Developers constantly rewrite the same Containerfile/Dockerfile configs. Besides taking away developer time, 
 these configs become hard to maintain/upgrade and adding new features feels like starting from scratch again.
-The goal of ContainerYard is to foster a library ecosystem of composable Containerfile modules. Users
-can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
-Want Flutter? Do the same. With ContainerYard you should never have to define certain Containerfile configs again. But
+With ContainerYard, you can write your config once and easily reuse and incrementally improve it over time.
+Users can then import these various modules with little to no configuration. Want Rust? Just add it to your `yard.yaml` file.
+Want Flutter? Do the same. Need the latest version? Easily upgrade with `yard update` or just modify the commit line.
+With ContainerYard you should never have to define certain Containerfile configs again. But
 if you do want to do something custom, ContainerYard does not get in your way, everything is Containerfile based 
 and the output is a pure Containerfile. No need to learn a complex tool, no need to re-invent the wheel, Containerfiles 
 and Tera templates are powerful enough. Just let ContainerYard be the glue.
