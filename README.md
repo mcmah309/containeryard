@@ -51,8 +51,7 @@ hooks:
     pre: yard update
     post: echo Done
 ```
-To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
-Which in the above case, will output a single Containerfile to your current directory.
+Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 
 ## Declaring A Simple Module
 
