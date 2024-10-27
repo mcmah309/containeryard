@@ -33,6 +33,12 @@ tera = "1"
 assert_cmd = "2"
 predicates = "3"
 
+[profile.dist]
+inherits = "release"
+lto = true
+strip = true
+codegen-units = 1
+
 [package.metadata.deb]
 maintainer = "Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
 copyright = "2024, Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
