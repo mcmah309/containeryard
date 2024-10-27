@@ -97,6 +97,7 @@ dpkg -i "$deb_file"
 ```bash
 cargo install containeryard
 ```
+Consider adding `--profile dist` for a longer compile time but a more optimal build.
 
 ## Why Use ContainerYard?
 
