@@ -7,12 +7,10 @@
 ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. 
 See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 
-ContainerYard breaks a containers definition into [modules](#declaring-a-simple-module). Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. 
-These modules can be reused, improved, and version controlled.
-While a `yard.yaml` file composes modules into Containerfiles.
+ContainerYard breaks a containers definition into [modules](#modules) and composes them with a [Yard file](#yardyaml). 
 
-## yard.yaml
-`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)).
+## Yard File
+A Yard file (`yard.yaml`) composes [modules](#modules) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)).
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
@@ -53,11 +51,11 @@ hooks:
 ```
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 
-## Declaring A Simple Module
+## Modules
 
-Modules represent some specific functionality of a container.
+Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. 
+Modules can be easily reused, improved, and version controlled.
 A module consists of a `Containerfile` and `yard-module.yaml` file.
-With modules you can write your functionality once and easily reuse and incrementally improve it over time.
 
 ### Containerfile
 `Containerfile` is the feature/functionality of the module.
