@@ -111,7 +111,8 @@ RUN apk update \
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
-## Why Use ContainerYard?
+## FAQ
+### Why Use ContainerYard?
 
 Developers constantly rewrite the same Containerfile/Dockerfile configs. Besides taking away developer time, 
 these configs become hard to maintain/upgrade and adding new features feels like starting from scratch again.
@@ -123,13 +124,13 @@ if you do want to do something custom, ContainerYard does not get in your way, e
 and the output is a pure Containerfile. No need to learn a complex tool, no need to re-invent the wheel, Containerfiles 
 and Tera templates are powerful enough. Just let ContainerYard be the glue.
 
-## Why Use Container Yard Over Nix Flakes
+### Why Use ContainerYard Over Nix Flakes?
 
-Think Nix flakes meets Containerfiles (aka Dockerfiles).
+ContainerYard is heavily inspired by Nix flakes. In fact, ContainerYard can be thought of as Nix flakes meets Containerfiles (aka Dockerfiles).
 
-Nix flakes guarantees reproducibility at the cost of developer flexibility. Container Yard is decentralized, allowing users to easily use different package managers and upstreams. As such, Container Yard sacrifices some reproducibility guarantees and gains complete developer flexibility.
+Nix flakes guarantees reproducibility at the cost of developer flexibility. ContainerYard is decentralized, allowing users to easily use different package managers and upstreams. As such, ContainerYard sacrifices some reproducibility guarantees and gains complete developer flexibility.
 
-Container Yard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
+ContainerYard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
 
 ## Installation
 
