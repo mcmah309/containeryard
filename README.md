@@ -12,7 +12,7 @@ These modules can be reused, improved, and version controlled.
 While a `yard.yaml` file composes modules into Containerfiles.
 
 ## yard.yaml
-`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more `Containerfile`s (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)).
+`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more Containerfiles (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)).
 ### Simple Example
 ```yaml
 inputs:
