@@ -12,27 +12,8 @@ These modules can be reused, improved, and version controlled.
 While a `yard.yaml` file composes modules into Containerfiles.
 
 ## yard.yaml
-`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more Containerfiles (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)).
-### Simple Example
-```yaml
-inputs:
-  remotes:
-    - url: https://github.com/mcmah309/yard_module_repository
-      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
-      modules:
-        base: bases/ubuntu/base
-        bash_flavor: apt/bash_interactive/flavors/mcmah309
+`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)).
 
-outputs:
-  Containerfile:
-    - base:
-        version: "24.04"
-    - bash_flavor:
-```
-To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
-Which in the above case, will output a single Containerfile to your current directory.
-
-### Full Example Schema
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
@@ -56,7 +37,7 @@ outputs:
     - base:
          # Inputs, shell commands `$(..)` and ENV vars `$..` also supported
         version: "24.04"
-    # Inline modules
+    # Inline module
     - RUN apt install git
     - git_config:
         user_name: $(git config --get user.name)
@@ -70,6 +51,8 @@ hooks:
     pre: yard update
     post: echo Done
 ```
+To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
+Which in the above case, will output a single Containerfile to your current directory.
 
 ## Declaring A Simple Module
 
