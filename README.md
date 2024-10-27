@@ -54,7 +54,23 @@ Which in the above case, will output a single Containerfile to your current dire
 ## Declaring A Simple Module
 
 Modules represent some specific functionality of a container.
-A module consists of a `yard-module.yaml` file and a `Containerfile`.
+A module consists of a `Containerfile` and `yard-module.yaml` file.
+With modules you can write your functionality once and easily reuse and incrementally improve it over time.
+
+### Containerfile
+`Containerfile` is the feature/functionality of the module.
+```Containerfile
+# Note: `version` is defined in the `yard-module.yaml` in the next section
+FROM alpine:{{ version | default (value="latest") }}
+
+RUN apk update \
+    && apk upgrade \
+    && apk add --no-cache ca-certificates \
+    && update-ca-certificates
+```
+This file is first treated as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
+The result is a pure Containerfile (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)) component
+that can be combined with other modules.
 
 ### yard-module.yaml
 `yard-module.yaml` defines the configuration options of the `Containerfile`.
@@ -82,20 +98,8 @@ outputs:
         version: "3.20.0"
 ```
 
-### Containerfile
-`Containerfile` is the feature/functionality of the module.
-```Containerfile
-FROM alpine:{{ version | default (value="latest") }}
-
-RUN apk update \
-    && apk upgrade \
-    && apk add --no-cache ca-certificates \
-    && update-ca-certificates
-```
-`Containerfile` (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/))
-is treated first as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
-
-Thus combining the examples from this section, the output for the final component would be
+### Output
+Thus combining the examples from this section, the output of `yard build` would be
 ```Containerfile
 FROM alpine:3.20.0
 
