@@ -29,6 +29,8 @@ outputs:
         version: "24.04"
     - bash_flavor:
 ```
+To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
+Which in the above case, will output a single Containerfile to your current directory.
 
 ### Full Example Schema
 ```yaml
@@ -68,9 +70,6 @@ hooks:
     pre: yard update
     post: echo Done
 ```
-
-To compose the modules defined in `yard.yaml` into Containerfiles, simply run `yard build`.
-Which in the above case, will output a single Containerfile to your current directory.
 
 ## Declaring A Simple Module
 
