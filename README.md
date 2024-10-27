@@ -5,7 +5,7 @@
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-containeryard-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/containeryard)
 
 ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. 
-See [See Why Use ContainerYard](#why-use-containeryard) for motivation.
+See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 
 ContainerYard breaks a containers definition into [modules](#declaring-a-simple-module). Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. 
 These modules can be reused, improved, and version controlled.
