@@ -46,7 +46,7 @@ async fn main() {
         } else {
             eprintln!("Oops something went wrong.");
             eprintln!(
-                "For more info, try again with environment variable `CONTAINERYARD_DEBUG` to anything but `0`."
+                "For more info, try again with environment variable `CONTAINERYARD_DEBUG` set to anything but `0`."
             );
         }
         exit(1);
