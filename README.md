@@ -4,12 +4,33 @@
 [<img alt="crates.io" src="https://img.shields.io/crates/v/containeryard.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/containeryard)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-containeryard-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/containeryard)
 
-ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers.
+ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. 
+See [See Why Use ContainerYard](#why-use-containeryard) for motivation.
 
-ContainerYard breaks Containerfiles into [modules](#declaring-a-simple-module). Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. While a `yard.yaml` file composes modules into Containerfiles.
+ContainerYard breaks a containers definition into [modules](#declaring-a-simple-module). Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. 
+These modules can be reused, improved, and version controlled.
+While a `yard.yaml` file composes modules into Containerfiles.
 
 ## yard.yaml
+`yard.yaml` composes [modules](#declaring-a-simple-module) and outputs one or more `Containerfile`s (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)).
+### Simple Example
+```yaml
+inputs:
+  remotes:
+    - url: https://github.com/mcmah309/yard_module_repository
+      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
+      modules:
+        base: bases/ubuntu/base
+        bash_flavor: apt/bash_interactive/flavors/mcmah309
 
+outputs:
+  Containerfile:
+    - base:
+        version: "24.04"
+    - bash_flavor:
+```
+
+### Full Example Schema
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
@@ -111,6 +132,26 @@ RUN apk update \
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
+## Installation
+
+Note: `yard` is the cli tool for ContainerYard.
+
+### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
+
+```bash
+release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.2.7'
+deb_file="containeryard_$(echo $release_ver | sed 's/^v//')-1_amd64.deb"
+curl -LO https://github.com/mcmah309/containeryard/releases/download/$release_ver/$deb_file
+dpkg -i "$deb_file"
+```
+
+### Cargo
+
+```bash
+cargo install containeryard
+```
+Consider adding `--profile dist` for a longer compile time but a more optimal build.
+
 ## FAQ
 ### Why Use ContainerYard?
 
@@ -131,26 +172,6 @@ ContainerYard is heavily inspired by Nix flakes. In fact, ContainerYard can be t
 Nix flakes guarantees reproducibility at the cost of developer flexibility. ContainerYard is decentralized, allowing users to easily use different package managers and upstreams. As such, ContainerYard sacrifices some reproducibility guarantees and gains complete developer flexibility.
 
 ContainerYard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
-
-## Installation
-
-Note: `yard` is the cli tool for ContainerYard.
-
-### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
-
-```bash
-release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.2.7'
-deb_file="containeryard_$(echo $release_ver | sed 's/^v//')-1_amd64.deb"
-curl -LO https://github.com/mcmah309/containeryard/releases/download/$release_ver/$deb_file
-dpkg -i "$deb_file"
-```
-
-### Cargo
-
-```bash
-cargo install containeryard
-```
-Consider adding `--profile dist` for a longer compile time but a more optimal build.
 
 ## Contributing
 
