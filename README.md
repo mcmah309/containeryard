@@ -47,7 +47,7 @@ hooks:
   build:
     # Command executed before the build. Will reload this file after the command is executed
     pre: yard update
-    post: echo Done
+    post: podman build . -t git
 ```
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 
