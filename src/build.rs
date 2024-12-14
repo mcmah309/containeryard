@@ -15,9 +15,7 @@ use tracing::trace;
 
 use crate::git::{create_provider, GitProvider};
 
-pub const MODULE_YAML_FILE_NAME: &str = "yard-module.yaml";
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
-pub const CONTAINERFILE_NAME: &str = "Containerfile";
 
 pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
     let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path)
@@ -296,9 +294,9 @@ impl SourceInfo for SourceInfoKind {
 
 //************************************************************************//
 
-pub struct ModuleFilesData {
+pub struct ModuleFileData {
     pub containerfile_data: String,
-    pub module_file_data: String,
+    pub config_data: String,
     pub source_info: SourceInfoKind,
 }
 
@@ -399,34 +397,26 @@ async fn resolve_yard_yaml(
         output_container_files,
     } = yard_yaml;
     assert!(!output_container_files.is_empty(), "Ouputs should exist");
-    let mut local_name_to_module_files_data: HashMap<String, ModuleFilesData> = HashMap::new();
+    let mut local_name_to_module_files_data: HashMap<String, ModuleFileData> = HashMap::new();
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_modules {
         if module_names_are_unique_check.contains(&name) {
             bail!(format!("A module with name '{}' is declared twice.", name));
         }
         module_names_are_unique_check.insert(name.clone());
-        let containerfile_file = PathBuf::from(&path).join(CONTAINERFILE_NAME);
-        let module_file = PathBuf::from(&path).join(MODULE_YAML_FILE_NAME);
-        let containerfile_data: String = fs::read_to_string(&containerfile_file)
+        let module_data = read_module_file(&PathBuf::from(&path))
             .await
-            .context(format!(
-                "Could not read '{}' to string.",
-                &containerfile_file.display()
-            ))?
-            .into();
-        let module_file_data: String = fs::read_to_string(&module_file)
-            .await
-            .context(format!(
-                "Could not read '{}' to string.",
-                &module_file.display()
-            ))?
-            .into();
+            .with_context(|| {
+                format!(
+                    "Could not read '{}' as a module.",
+                    &PathBuf::from(&path).display()
+                )
+            })?;
         local_name_to_module_files_data.insert(
             name.clone(),
-            ModuleFilesData {
-                containerfile_data,
-                module_file_data,
+            ModuleFileData {
+                containerfile_data: module_data.containerfile,
+                config_data: module_data.config,
                 source_info: SourceInfoKind::LocalModuleInfo(LocalModuleInfo { path, name }),
             },
         );
@@ -440,7 +430,7 @@ async fn resolve_yard_yaml(
         }
     }
 
-    let remote_name_to_module_files: HashMap<String, ModuleFilesData> =
+    let remote_name_to_module_files: HashMap<String, ModuleFileData> =
         download_remotes(input_remotes)
             .await
             .context("Failed to download some remotes.")?;
@@ -500,8 +490,8 @@ async fn resolve_yard_yaml(
 
 async fn download_remotes(
     remotes: Vec<RemoteModules>,
-) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
-    let mut name_to_module_file_data: HashMap<String, ModuleFilesData> = HashMap::new();
+) -> anyhow::Result<HashMap<String, ModuleFileData>> {
+    let mut name_to_module_file_data: HashMap<String, ModuleFileData> = HashMap::new();
     for remote in remotes {
         let git_provider = create_provider(remote.url, remote.commit)?;
         trace!("Identified provider '{:?}'", git_provider);
@@ -534,7 +524,11 @@ async fn resolve_additional_files(
                         );
                         continue;
                     }
-                    let remote_file_path = format!("{}/{}", remote.path, file_path);
+                    let remote_file_path = format!(
+                        "{}/{}",
+                        PathBuf::from(&remote.path).parent().unwrap().display(),
+                        file_path
+                    );
                     git_provider
                         .retrieve_file_and_put_at(&remote_file_path, &local_download_path)
                         .await
@@ -588,7 +582,7 @@ fn is_local_absolute(path: &Path) -> anyhow::Result<()> {
 }
 
 async fn validate_schema_and_create_module_builders(
-    name_to_module_files_data: HashMap<String, ModuleFilesData>,
+    name_to_module_files_data: HashMap<String, ModuleFileData>,
 ) -> anyhow::Result<HashMap<String, ModuleBuilder>> {
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
     let yard_module_schema: serde_json::Value = serde_json::from_str(yard_module_schema)
@@ -630,13 +624,13 @@ async fn validate_schema_and_create_module_builders(
 
 /// Validates and creates the internal module representation.
 async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow::Result<()>>(
-    module_files: ModuleFilesData,
+    module_files: ModuleFileData,
     validate_module_schema_fn: F,
 ) -> anyhow::Result<ModuleBuilder> {
     let (required_files, required_template_values, optional_template_values) =
         (|| -> anyhow::Result<_> {
             let yard_module_yaml: serde_yaml::Value =
-                serde_yaml::from_str(&module_files.module_file_data)
+                serde_yaml::from_str(&module_files.config_data)
                     .with_context(|| "yard-module-schema.json is not valid json.")?;
 
             validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
@@ -763,4 +757,65 @@ fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
         container_file_resolved_parts.clear();
     }
     Ok(outputs)
+}
+
+//************************************************************************//
+
+#[derive(PartialEq)]
+enum Capture {
+    None,
+    Containerfile,
+    Config,
+}
+
+pub struct ModuleData {
+    pub containerfile: String,
+    pub config: String,
+}
+
+pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
+    let data = fs::read_to_string(path).await?;
+    let mut container_data = None;
+    let mut config_data = None;
+    let mut capture_status = Capture::None;
+    let mut capture = String::new();
+    for line in data.lines() {
+        if line == "```yaml" {
+            if capture_status != Capture::None {
+                anyhow::bail!("Found another config start line before finishing the previous one");
+            }
+            capture_status = Capture::Config;
+            continue;
+        } else if line.to_lowercase() == "```containerfile"
+            || line.to_lowercase() == "```dockerfile"
+        {
+            if capture_status != Capture::None {
+                anyhow::bail!(
+                    "Found another Containerfile start line before finishing the previous one"
+                );
+            }
+            capture_status = Capture::Containerfile;
+            continue;
+        } else if line == "```" {
+            match capture_status {
+                Capture::None => {
+                    anyhow::bail!("Found closing a closing line '```' without opening one")
+                }
+                Capture::Containerfile => container_data = Some(capture),
+                Capture::Config => config_data = Some(capture),
+            }
+            capture_status = Capture::None;
+            capture = String::new();
+            continue;
+        }
+        capture.push_str(line);
+        capture.push_str("\n");
+    }
+    if let (Some(container_data), Some(config_data)) = (container_data, config_data) {
+        return Ok(ModuleData {
+            containerfile: container_data,
+            config: config_data,
+        });
+    }
+    anyhow::bail!("Could not find both containerfile and config in the module file")
 }

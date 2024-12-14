@@ -7,20 +7,20 @@ hooks:
 
 inputs:
   modules:
-    finalizer: local_modules/finalizer
+    finalizer: local_modules/finalizer.md
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
-      commit: 1ff83993d108d9199ab4951a3a52b352733a214f
+      commit: 59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420
       modules:
-        "22_04": bases/ubuntu/android/ubuntu_22_04
-        "24_04": bases/ubuntu/android/ubuntu_24_04
-        android_sdk: dependent/android_sdk/developer_tools
-        flutter: dependent/apt/flutter
-        rust: dependent/apt/rust
-        rust_essentials: dependent/apt/rust/essentials
-        git: dependent/apt/git
-        git_config: dependent/git/git_config
-        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309
+        "22_04": bases/ubuntu/android/22_04.md
+        "24_04": bases/ubuntu/android/24_04.md
+        android_sdk: dependent/android_sdk/developer_tools.md
+        flutter: dependent/apt/flutter/latest.md
+        rust: dependent/apt/rust/nightly.md
+        rust_essentials: dependent/apt/rust/essentials.md
+        git: dependent/apt/git.md
+        git_config: dependent/git/git_config.md
+        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md
 
 outputs:
   Containerfile.22_04:

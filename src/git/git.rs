@@ -6,11 +6,11 @@ use tokio::{fs, process::Command};
 use tracing::trace;
 
 use crate::{
-    build::{RemoteModuleInfo, SourceInfoKind, CONTAINERFILE_NAME, MODULE_YAML_FILE_NAME},
+    build::{read_module_file, ModuleData, RemoteModuleInfo, SourceInfoKind},
     common::is_debug,
 };
 
-use super::{path_in_cache_dir, GitProvider, ModuleFilesData, ReferenceInfo};
+use super::{path_in_cache_dir, GitProvider, ModuleFileData, ReferenceInfo};
 
 /// Uses local `git` instance to clone and resolve references.
 #[derive(Debug)]
@@ -43,50 +43,28 @@ impl GitProvider for Git {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
-        let mut module_to_files: HashMap<String, ModuleFilesData> = HashMap::new();
+    ) -> anyhow::Result<HashMap<String, ModuleFileData>> {
+        let mut module_to_files: HashMap<String, ModuleFileData> = HashMap::new();
         for (name, module_path) in name_to_path.into_iter() {
-            let module_cache_dir = path_in_cache_dir(
+            let module_path_cache = path_in_cache_dir(
                 &PathBuf::from(&module_path),
                 &self.provider,
                 &self.repo_owner,
                 &self.repo_name,
                 &self.commit,
             );
-            let cache_module_file = module_cache_dir.join(MODULE_YAML_FILE_NAME);
-            let cache_containerfile_file = module_cache_dir.join(CONTAINERFILE_NAME);
-            let files = [
-                (&cache_module_file, MODULE_YAML_FILE_NAME),
-                (&cache_containerfile_file, CONTAINERFILE_NAME),
-            ];
-            for (cache_path, file_name) in files {
-                if !cache_path.exists() {
-                    trace!(
-                        "Path not found in cache. Retrieving file `{}` from remote for module `{}`",
-                        file_name,
-                        name
-                    );
-                    let remote_path = format!("{module_path}/{file_name}");
-                    self.retrieve_file_and_put_at(&remote_path, cache_path)
-                        .await?;
-                }
-                assert!(cache_path.exists());
+            if !module_path_cache.exists() {
+                trace!("Module `{}` not found in cache. Retrieving from remote...", name);
+                self.retrieve_file_and_put_at(&module_path, &module_path_cache)
+                    .await?;
             }
+            assert!(module_path_cache.exists());
 
-            let containerfile_data: String = fs::read_to_string(&cache_containerfile_file)
-                .await
-                .context(format!(
-                    "Could not read '{}' to string.",
-                    &cache_containerfile_file.display()
-                ))?
-                .into();
-            let module_file_data: String = fs::read_to_string(&cache_module_file)
-                .await
-                .context(format!(
-                    "Could not read '{}' to string.",
-                    &cache_module_file.display()
-                ))?
-                .into();
+            let module_data: ModuleData =
+                read_module_file(&module_path_cache).await.context(format!(
+                    "Could not read '{}' as a module.",
+                    &module_path_cache.display()
+                ))?;
 
             let source_info = SourceInfoKind::RemoteModuleInfo(RemoteModuleInfo {
                 url: self.url.clone(),
@@ -98,9 +76,9 @@ impl GitProvider for Git {
             });
             module_to_files.insert(
                 name,
-                ModuleFilesData {
-                    containerfile_data,
-                    module_file_data,
+                ModuleFileData {
+                    containerfile_data: module_data.containerfile,
+                    config_data: module_data.config,
                     source_info,
                 },
             );

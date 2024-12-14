@@ -10,11 +10,11 @@ inputs:
   #     finalizer: local_modules/finalizer
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
-      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
+      commit: 59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420
       modules:
-        base: bases/ubuntu/base
-        git_config: independent/git_config
-        bash_flavor: apt/bash_interactive/flavors/mcmah309
+        base: bases/ubuntu/lts.md
+        git_config: dependent/git/git_config.md
+        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md
 
 outputs:
   Containerfile:

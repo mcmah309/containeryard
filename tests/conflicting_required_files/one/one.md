@@ -1,5 +1,10 @@
+```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
-description: "This is a modules description for Two"
+description: "This is a modules description for One"
 required_files:
-  - conflicting.md
+  - conflicting_file
+```
+```dockerfile
+# Empty
+```

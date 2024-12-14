@@ -2,8 +2,8 @@
 
 inputs:
   modules:
-    one: one
-    two: two
+    one: one/one.md
+    two: two/two.md
 
 outputs:
   Containerfile:

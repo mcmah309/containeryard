@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::build::ModuleFilesData;
+use crate::build::ModuleFileData;
 use git::Git;
 use tokio::fs;
 use tracing::{info, trace};
@@ -26,7 +26,7 @@ pub trait GitProvider {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFilesData>>;
+    ) -> anyhow::Result<HashMap<String, ModuleFileData>>;
 
     /// Returns the reference information for this provider
     fn reference_info<'a>(&'a self) -> ReferenceInfo<'a>;
@@ -36,7 +36,7 @@ pub trait GitProvider {
 
     /// Downloads the file or gets from cache and returns the data as a [String]. Caches locally if the
     /// data is downloaded for the first time
-    async fn retrieve_data_locally_or_extract_from_remote_and_cache_locally(
+    async fn extract_remote_path_data_save_save_to_cache(
         &self,
         remote_path: &str,
     ) -> anyhow::Result<String> {
@@ -50,19 +50,6 @@ pub trait GitProvider {
             url,
             commit,
         } = reference_info;
-
-        trace!("Checking cache for `{:?}`", reference_info);
-        let file_data = retrieve_file_from_cache(
-            &remote_path_as_path,
-            &provider,
-            &repo_owner,
-            &repo_name,
-            &commit,
-        )?;
-        if let Some(file_data) = file_data {
-            trace!("`{:?}` found in cache", reference_info);
-            return Ok(file_data);
-        }
 
         trace!(
             "`{:?}` not found in cache, downloading from remote",
@@ -91,7 +78,7 @@ pub trait GitProvider {
         local_download_path: &Path,
     ) -> anyhow::Result<()> {
         let file_data = self
-            .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
+            .extract_remote_path_data_save_save_to_cache(remote_path)
             .await?;
         fs::create_dir_all(local_download_path.parent().unwrap()).await?;
         fs::write(local_download_path, file_data).await?;
@@ -109,7 +96,7 @@ impl GitProvider for GitProviderKind {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFilesData>> {
+    ) -> anyhow::Result<HashMap<String, ModuleFileData>> {
         match self {
             GitProviderKind::Git(git) => git.retrieve_module(name_to_path).await,
         }
@@ -127,14 +114,14 @@ impl GitProvider for GitProviderKind {
         }
     }
 
-    async fn retrieve_data_locally_or_extract_from_remote_and_cache_locally(
+    async fn extract_remote_path_data_save_save_to_cache(
         &self,
         remote_path: &str,
     ) -> anyhow::Result<String> {
         match self {
             GitProviderKind::Git(git) => {
                 git
-                    .retrieve_data_locally_or_extract_from_remote_and_cache_locally(remote_path)
+                    .extract_remote_path_data_save_save_to_cache(remote_path)
                     .await
             }
         }
@@ -149,22 +136,6 @@ pub fn create_provider(url: String, commit: String) -> anyhow::Result<GitProvide
 
     info!("Unknown provider falling back to using default git resolver");
     Ok(GitProviderKind::Git(Git::new(url, commit)?))
-}
-
-// returns none if file not found
-pub fn retrieve_file_from_cache(
-    file_path: &Path,
-    provider: &str,
-    owner: &str,
-    repo_name: &str,
-    commit: &str,
-) -> anyhow::Result<Option<String>> {
-    let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
-    if cache_file_path.exists() {
-        Ok(Some(std::fs::read_to_string(cache_file_path)?))
-    } else {
-        Ok(None)
-    }
 }
 
 pub fn save_to_cache(
