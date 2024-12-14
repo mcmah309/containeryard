@@ -10,7 +10,7 @@ See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 ContainerYard breaks a containers definition into [modules](#modules) and composes them with a [yard file](#yardyaml). 
 
 ## Yard File
-A yard file (`yard.yaml`) composes [modules](#modules) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)).
+A yard file (`yard.yaml`) composes [modules](#modules) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)). E.g.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
@@ -50,6 +50,7 @@ hooks:
     post: podman build . -t git
 ```
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
+See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
 ## Modules
 
@@ -59,9 +60,9 @@ Modules can be easily reused, improved, and version controlled.
 ### Module Parts
 A module can have two parts, a Containerfile (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)) component and an optional configuration component.
 #### Containerfile
-Containerfile define the core of the module.
+Containerfile defines the core of the module. E.g.
 ```dockerfile
-# Note: `version` is defined in the config in the next section
+# Note: `version` is defined in the configuration in the next section
 FROM alpine:{{ version | default (value="latest") }}
 
 RUN apk update \
@@ -72,8 +73,8 @@ RUN apk update \
 This file is first treated as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
 The result is a pure Containerfile component that can be combined with other modules.
 
-#### Config
-The config
+#### Configuration
+The configuration component is a `yaml` block and provides metadata for what the Containerfile component needs. E.g.
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
@@ -97,7 +98,6 @@ outputs:
     - module:
         version: "3.20.0"
 ```
-See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
 ### Putting It All Together
 Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build` would be
