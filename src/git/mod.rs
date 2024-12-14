@@ -21,7 +21,7 @@ pub struct ReferenceInfo<'a> {
 }
 
 pub trait GitProvider {
-    /// Downloads the module (Containerfile and yard-module.yaml) or gets from cache at the
+    /// Downloads the module module file or gets from cache at the
     /// specified paths, and returns the raw data.
     async fn retrieve_module(
         &self,

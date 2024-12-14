@@ -58,7 +58,7 @@ pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Deserialized yard-module.yaml
+// Deserialized module config
 //************************************************************************//
 /// Created using the yard-module-schema.json file and https://app.quicktype.io/
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
@@ -217,7 +217,7 @@ struct Containerfiles {
     name_to_module: HashMap<String, Vec<Module>>,
 }
 
-/// The template Containerfile file and yard-module.yaml file combined. Ready to apply
+/// The template Containerfile and config combined. Ready to apply
 #[derive(Debug, Clone)]
 struct Module {
     containerfile_template: String,

@@ -86,7 +86,7 @@ args:
 # Files to be pulled in with this module
 required_files:
 ```
-`yard.yaml` provides the values for `args:` declared in a `yard-module.yaml`.
+`yard.yaml` provides the values for `args:` declared in a this block.
 e.g.
 ```yaml
 inputs:
