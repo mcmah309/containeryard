@@ -1,0 +1,26 @@
+####  base: bases/ubuntu/lts.md  ####
+
+FROM ubuntu:22.04
+
+RUN apt-get update -y \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends --no-install-suggests ca-certificates \
+    && update-ca-certificates
+
+####  ~INLINE~  ####
+
+RUN apt install -y git
+
+####  git_config: dependent/git/git_config.md  ####
+
+RUN git config --global user.name mcmah309 && \
+    git config --global user.email dillonmcmahon79@gmail.com
+
+####  bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md  ####
+
+COPY ./setup_bash.sh /tmp/
+RUN chmod +x /tmp/setup_bash.sh && /tmp/setup_bash.sh && rm /tmp/setup_bash.sh
+
+####  ~INLINE~  ####
+
+ENTRYPOINT ["/bin/bash"]
