@@ -80,10 +80,15 @@ fn get_latest_commit_sha(repo_url: &str) -> anyhow::Result<String> {
         .arg(repo_url)
         .arg("HEAD")
         .output()
-        .map_err(|e| anyhow!("Failed to execute git command: {}", e))?;
+        .map_err(|e| anyhow!("Failed to execute git command to retrieve latest commit: {}", e))?;
 
     if !output.status.success() {
-        bail!("Git command failed with status: {}", output.status);
+        bail!(
+            "Git command to retrieve latest commit failed with {}\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     let output_str = str::from_utf8(&output.stdout)?;
@@ -93,12 +98,18 @@ fn get_latest_commit_sha(repo_url: &str) -> anyhow::Result<String> {
         .map(|e| e.parse())
         .collect::<Result<Vec<String>, _>>()?;
     if lines.len() != 2 || !lines[1].contains("HEAD") {
-        bail!("Unexpected command output {:?}", lines);
+        bail!(
+            "Unexpected command output for retrieving the latest commit - `{:?}`",
+            lines
+        );
     }
     let head_line = lines.remove(1);
     let mut parts = head_line.split_whitespace().collect::<Vec<&str>>();
     if parts.len() != 2 || !parts[1].contains("HEAD") {
-        bail!("Unexpected command output {:?}", lines);
+        bail!(
+            "Unexpected command output for retrieving the latest commit - `{:?}`",
+            lines
+        );
     }
     let sha = parts.remove(0);
 

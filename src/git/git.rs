@@ -1,14 +1,11 @@
-use std::{collections::HashMap, path::PathBuf, process::Stdio};
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context};
 use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
 
-use crate::{
-    build::{read_module_file, ModuleData, RemoteModuleInfo, SourceInfoKind},
-    common::is_debug,
-};
+use crate::build::{read_module_file, ModuleData, RemoteModuleInfo, SourceInfoKind};
 
 use super::{path_in_cache_dir, GitProvider, ModuleFileData, ReferenceInfo};
 
@@ -54,7 +51,10 @@ impl GitProvider for Git {
                 &self.commit,
             );
             if !module_path_cache.exists() {
-                trace!("Module `{}` not found in cache. Retrieving from remote...", name);
+                trace!(
+                    "Module `{}` not found in cache. Retrieving from remote...",
+                    name
+                );
                 self.retrieve_file_and_put_at(&module_path, &module_path_cache)
                     .await?;
             }
@@ -127,18 +127,27 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let clone_command_exit = setup_output(Command::new("git"))
+            let clone_output = Command::new("git")
                 .args(["clone", &self.url])
                 .current_dir(&provider_git_cache_dir)
-                .spawn()?
-                .wait()
-                .await;
-            if !clone_command_exit?.success() {
-                bail!(format!(
-                    "Could not clone git repo `{}` to `{}`",
+                .output()
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "Failed to execute git command to clone {}:\n{}",
+                        self.url,
+                        e
+                    )
+                })?;
+            if !clone_output.status.success() {
+                bail!(
+                    "Git failed with {}.\nCould not clone git repo `{}` to `{}`.\nstdout:\n{}\nstderr:\n{}",
+                    &clone_output.status,
                     self.url,
-                    provider_git_cache_dir.to_str().unwrap_or("")
-                ))
+                    provider_git_cache_dir.to_str().unwrap_or(""),
+                    String::from_utf8_lossy(&clone_output.stdout),
+                    String::from_utf8_lossy(&clone_output.stderr)
+                );
             }
         } else {
             trace!(
@@ -146,18 +155,27 @@ impl GitProvider for Git {
                 self.url,
                 provider_git_cache_dir.to_str().unwrap_or("")
             );
-            let fetch_command_exit = setup_output(Command::new("git"))
+            let fetch_output = Command::new("git")
                 .args(["fetch", "--all", "--prune"])
                 .current_dir(&repo_dir)
-                .spawn()?
-                .wait()
-                .await;
-            if !fetch_command_exit?.success() {
-                bail!(format!(
-                    "Could not pull git repo `{}` to `{}`",
+                .output()
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "Failed to execute git command to pull the latest for {}:\n{}",
+                        self.url,
+                        e
+                    )
+                })?;
+            if !fetch_output.status.success() {
+                bail!(
+                    "Git failed with {}.\nCould not pull git repo `{}` to `{}`.\nstdout:\n{}\nstderr:\n{}",
+                    &fetch_output.status,
                     self.url,
-                    repo_dir.to_str().unwrap_or("")
-                ))
+                    provider_git_cache_dir.to_str().unwrap_or(""),
+                    String::from_utf8_lossy(&fetch_output.stdout),
+                    String::from_utf8_lossy(&fetch_output.stderr)
+                );
             }
         }
 
@@ -167,17 +185,27 @@ impl GitProvider for Git {
             self.commit,
             self.url
         );
-        let checkout_command_exit = setup_output(Command::new("git"))
+        let checkout_output = Command::new("git")
             .args(["checkout", &self.commit])
             .current_dir(&repo_dir)
-            .spawn()?
-            .wait()
-            .await;
-        if !checkout_command_exit?.success() {
-            bail!(format!(
-                "Could not checkout commit `{}` in repo `{}`",
-                self.commit, self.url
-            ))
+            .output()
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to execute git command to checkout {}:\n{}",
+                    self.url,
+                    e
+                )
+            })?;
+        if !checkout_output.status.success() {
+            bail!(
+                "Git failed with {}.\nCould not checkout commit `{}` in git repo `{}`.\nstdout:\n{}\nstderr:\n{}",
+                &checkout_output.status,
+                self.commit,
+                self.url,
+                String::from_utf8_lossy(&checkout_output.stdout),
+                String::from_utf8_lossy(&checkout_output.stderr)
+            );
         }
 
         // get file data
@@ -189,10 +217,10 @@ impl GitProvider for Git {
             ))
         }
 
-        let file_data = fs::read_to_string(remote_file_path)
+        let file_data = fs::read_to_string(&remote_file_path)
             .await
             .map_err(|e| anyhow::Error::from(e))
-            .context("wumbo")?;
+            .with_context(|| format!("Could not read `{}`", &remote_file_path.display()))?;
 
         Ok(file_data)
     }
@@ -255,19 +283,6 @@ fn extract_user_and_repo_from_http(url: &str) -> anyhow::Result<(String, String)
             "Could not extract user and repo from url `{}`",
             url
         )))
-}
-
-//************************************************************************//
-
-fn setup_output(mut command: Command) -> Command {
-    // inherits by default
-    // command.stderr(Stdio::inherit());
-    if is_debug() {
-        // command.stdout(Stdio::inherit());
-    } else {
-        command.stdout(Stdio::null());
-    }
-    command
 }
 
 // /// characters not allowed in dirs on windows and linux
