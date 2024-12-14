@@ -762,7 +762,7 @@ fn apply_templates_and_labels(yard: Containerfiles) -> anyhow::Result<Outputs> {
                 })?,
             };
             let label = included_module.source_info.label();
-            let part = format!("### {label} ###\n\n{}\n", rendered_part.trim());
+            let part = format!("####  {label}  ####\n\n{}\n", rendered_part.trim());
             container_file_resolved_parts.push(part);
         }
         outputs.push((containerfile_name, container_file_resolved_parts.join("\n")));
