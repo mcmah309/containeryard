@@ -100,6 +100,7 @@ impl GitProvider for Git {
         // Ensure repo is downloaded
         let provider_git_cache_dir = dirs::cache_dir()
             .expect("Could not determine cache directory of platform")
+            .join("containeryard")
             .join("sources")
             .join("git_repos")
             .join(&self.provider)

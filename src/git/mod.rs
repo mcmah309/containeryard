@@ -167,6 +167,7 @@ pub fn path_in_cache_dir(
 ) -> PathBuf {
     dirs::cache_dir()
         .expect("Could not determine cache directory of platform")
+        .join("containeryard")
         .join("extracted_files")
         .join(&provider)
         .join(&owner)
