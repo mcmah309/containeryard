@@ -19,4 +19,24 @@ pub mod test {
             }
         }
     }
+
+    #[test]
+    fn pure_containerfile() {
+        let assert = assert_cmd::Command::cargo_bin("yard")
+            .unwrap()
+            .current_dir("tests/pure_containerfile")
+            .arg("build")
+            .assert();
+        assert.success();
+    }
+
+    #[test]
+    fn module_file_no_config() {
+        let assert = assert_cmd::Command::cargo_bin("yard")
+            .unwrap()
+            .current_dir("tests/module_file_no_config")
+            .arg("build")
+            .assert();
+        assert.success();
+    }
 }

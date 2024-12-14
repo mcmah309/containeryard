@@ -65,7 +65,7 @@ pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
 pub struct YamlModule {
     pub args: Option<YamlArgs>,
     /// This is a modules description
-    pub description: String,
+    pub description: Option<String>,
     /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
     pub required_files: Option<Vec<String>>,
 }
@@ -796,6 +796,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
             if capture_status != Capture::None {
                 anyhow::bail!("Found another config start line before finishing the previous one");
             }
+            capture.clear();
             capture_status = Capture::Config;
             continue;
         } else if line.to_lowercase() == "```containerfile"
@@ -806,6 +807,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
                     "Found another Containerfile start line before finishing the previous one"
                 );
             }
+            capture.clear();
             capture_status = Capture::Containerfile;
             continue;
         } else if line == "```" {
@@ -823,11 +825,27 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
         capture.push_str(line);
         capture.push_str("\n");
     }
-    if let (Some(container_data), Some(config_data)) = (container_data, config_data) {
-        return Ok(ModuleData {
+    return Ok(match (container_data, config_data) {
+        (None, None) => {
+            if capture.is_empty() {
+                anyhow::bail!("Could not find containerfile or config in the module file")
+            } else {
+                ModuleData {
+                    containerfile: capture,
+                    config: String::new(),
+                }
+            }
+        }
+        (None, Some(_)) => {
+            anyhow::bail!("Found config in the module file, but no containerfile data")
+        }
+        (Some(container_data), None) => ModuleData {
+            containerfile: container_data,
+            config: String::new(),
+        },
+        (Some(container_data), Some(config_data)) => ModuleData {
             containerfile: container_data,
             config: config_data,
-        });
-    }
-    anyhow::bail!("Could not find both containerfile and config in the module file")
+        },
+    });
 }
