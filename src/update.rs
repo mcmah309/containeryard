@@ -16,8 +16,8 @@ pub fn update(path: &Path) -> anyhow::Result<()> {
     let reader = io::BufReader::new(input_file);
 
     let mut lines: Vec<String> = Vec::new();
-    let commit_capture_regex = regex::Regex::new(r"^(\s*commit:\s*)([0-9a-f]+)(\s*.*)$")?;
-    let url_capture_regex = regex::Regex::new(r"\s*url:\s*(.*)")?;
+    let commit_capture_regex = regex::Regex::new(r"^(\s+commit:\s+)([0-9a-f]+)(\s*.*)$")?;
+    let url_capture_regex = regex::Regex::new(r"\s+url:\s+(.*)")?;
 
     let mut latest_commit = String::new();
     let mut commit_line: usize = usize::MAX;
@@ -37,7 +37,7 @@ pub fn update(path: &Path) -> anyhow::Result<()> {
                 }
                 let current_repo_url = captures.get(1).map_or("", |m| m.as_str()).to_string();
                 latest_commit = get_latest_commit_sha(&current_repo_url)
-                    .with_context(|| format!("Line number '{}'", line_number))?
+                    .with_context(|| format!("Failure occurred at line number '{}' in {}", line_number, YARD_YAML_FILE_NAME))?
             }
 
             // Check if the line matches the commit pattern
