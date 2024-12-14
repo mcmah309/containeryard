@@ -43,11 +43,9 @@ async fn main() {
     if let Err(error) = result {
         eprintln!("Oops something went wrong.\n");
         eprintln!("{:?}", error);
-        if is_debug {
-            eprintln!("{:?}", error);
-        } else {
+        if !is_debug {
             eprintln!(
-                "For more info, try again with environment variable `CONTAINERYARD_DEBUG` set to anything but `0`."
+                "\nFor more info, try again with environment variable `CONTAINERYARD_DEBUG` set to anything but `0`."
             );
         }
         exit(1);
