@@ -41,10 +41,11 @@ async fn main() {
         Commands::Update { path } => update(&path),
     };
     if let Err(error) = result {
+        eprintln!("Oops something went wrong.\n");
+        eprintln!("{:?}", error);
         if is_debug {
             eprintln!("{:?}", error);
         } else {
-            eprintln!("Oops something went wrong.");
             eprintln!(
                 "For more info, try again with environment variable `CONTAINERYARD_DEBUG` set to anything but `0`."
             );
