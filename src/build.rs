@@ -30,8 +30,8 @@ pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
     if resolved_yard_file.name_to_module.is_empty() {
         bail!("No modules were resolved.")
     }
-    let outputs =
-        apply_templates(resolved_yard_file).context("Could not apply templates".to_string())?;
+    let outputs = apply_templates_and_labels(resolved_yard_file)
+        .context("Could not apply templates".to_string())?;
     if outputs.is_empty() {
         bail!("No Containerfiles where created.")
     }
@@ -280,6 +280,16 @@ pub enum SourceInfoKind {
     LocalModuleInfo(LocalModuleInfo),
     RemoteModuleInfo(RemoteModuleInfo),
     InlineModuleInfo(InlineModuleInfo),
+}
+
+impl SourceInfoKind {
+    fn label(&self) -> String {
+        match self {
+            SourceInfoKind::LocalModuleInfo(info) => format!("{}: {}", &info.name, &info.path),
+            SourceInfoKind::RemoteModuleInfo(info) => format!("{}: {}", &info.name, &info.path),
+            SourceInfoKind::InlineModuleInfo(_) => "~INLINE~".to_owned(),
+        }
+    }
 }
 
 impl SourceInfo for SourceInfoKind {
@@ -727,7 +737,7 @@ fn resolve_template_value(val: String) -> anyhow::Result<String> {
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
+fn apply_templates_and_labels(yard: Containerfiles) -> anyhow::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(vec![]);
@@ -751,7 +761,9 @@ fn apply_templates(yard: Containerfiles) -> anyhow::Result<Outputs> {
                     )
                 })?,
             };
-            container_file_resolved_parts.push(rendered_part);
+            let label = included_module.source_info.label();
+            let part = format!("### {label} ###\n\n{}\n", rendered_part.trim());
+            container_file_resolved_parts.push(part);
         }
         outputs.push((containerfile_name, container_file_resolved_parts.join("\n")));
         container_file_resolved_parts.clear();
