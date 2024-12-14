@@ -18,15 +18,15 @@ A yard file (`yard.yaml`) composes [modules](#modules) and outputs one or more C
 inputs:
   # Modules found on local paths
   modules:
-    finalizer: local_modules/finalizer
+    finalizer: local_modules/finalizer.md
   # Modules found in a remote repos
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
-      commit: 992eac4ffc0a65d7e8cd30597d93920901fbd1cd
+      commit: 59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420
       modules:
-        base: bases/ubuntu/base
-        git_config: independent/git_config
-        bash_flavor: apt/bash_interactive/flavors/mcmah309
+        base: bases/ubuntu/lts.md
+        git_config: dependent/git/git_config.md
+        bash_flavor: apt/bash_interactive/flavors/mcmah309/mcmah309.md
 
 outputs:
   # Output Containerfile created from modules
@@ -53,14 +53,15 @@ Simply running `yard build` in the above case, will output a single Containerfil
 
 ## Modules
 
-Modules represent specific functionality of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/tree/3c81a4a383f4446437df364ef0a6ba17bc88c479/dependent/apt/rust) defines rust's installation. 
+Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 
 Modules can be easily reused, improved, and version controlled.
-A module consists of a `Containerfile` and `yard-module.yaml` file.
 
-### Containerfile
-`Containerfile` is the feature/functionality of the module.
-```Containerfile
-# Note: `version` is defined in the `yard-module.yaml` in the next section
+### Module Parts
+A module can have two parts, a Containerfile (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)) component and an optional configuration component.
+#### Containerfile
+Containerfile define the core of the module.
+```dockerfile
+# Note: `version` is defined in the config in the next section
 FROM alpine:{{ version | default (value="latest") }}
 
 RUN apk update \
@@ -69,11 +70,10 @@ RUN apk update \
     && update-ca-certificates
 ```
 This file is first treated as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
-The result is a pure Containerfile (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)) component
-that can be combined with other modules.
+The result is a pure Containerfile component that can be combined with other modules.
 
-### yard-module.yaml
-`yard-module.yaml` defines the configuration options of the `Containerfile`.
+#### Config
+The config
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
@@ -97,10 +97,11 @@ outputs:
     - module:
         version: "3.20.0"
 ```
+See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
-### Output
-Thus combining the examples from this section, the output of `yard build` would be
-```Containerfile
+### Putting It All Together
+Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build` would be
+```dockerfile
 FROM alpine:3.20.0
 
 RUN apk update \
@@ -110,6 +111,25 @@ RUN apk update \
 ```
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
+
+#### Module Layout
+A module consists of one file with one to two parts - a Containerfile section and an optional config section.
+
+---
+\`\`\`dockerfile
+
+\# Dockerfile Statements Here
+
+\`\`\`
+
+\`\`\`yaml
+
+\# Configuration here
+
+\`\`\`
+
+---
+Click [here](https://raw.githubusercontent.com/mcmah309/yard_module_repository/refs/heads/master/dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md) for an example. Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration.
 
 ## Installation
 
