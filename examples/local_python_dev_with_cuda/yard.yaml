@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
+
+hooks:
+  build:
+    # pre: yard update
+    post: podman build . -t python-with-cuda
+
+inputs:
+  modules:
+    local: local.Containerfile
+  remotes:
+    - url: https://github.com/mcmah309/yard_module_repository
+      commit: 6b79068e4b0204ad7516bb3c1b7666b8d80ad404
+      modules:
+        git: dependent/apt/git.md
+        git_config: dependent/git/git_config.md
+        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md
+
+outputs:
+  Containerfile:
+    - local:
+    - git:
+    - git_config:
+        user_name: $(git config --get user.name)
+        email: $(git config --get user.email)
+    - bash_flavor:
+    - ENTRYPOINT ["/bin/bash"]

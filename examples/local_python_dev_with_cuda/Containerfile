@@ -1,0 +1,35 @@
+####  local: local.Containerfile  ####
+
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+
+RUN apt-get update && apt-get upgrade -y
+
+RUN apt-get install -y python3 python3-pip python3-venv build-essential python3-dev
+
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124
+
+COPY project/requirements.txt /tmp/requirements.txt
+
+RUN pip install -r /tmp/requirements.txt
+
+WORKDIR /app
+
+####  git: dependent/apt/git.md  ####
+
+RUN apt install -y git
+
+####  git_config: dependent/git/git_config.md  ####
+
+RUN git config --global user.name mcmah309 && \
+    git config --global user.email dillonmcmahon79@gmail.com
+
+####  bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md  ####
+
+COPY ./setup_bash.sh /tmp/
+RUN chmod +x /tmp/setup_bash.sh && /tmp/setup_bash.sh && rm /tmp/setup_bash.sh
+
+####  ~INLINE~  ####
+
+ENTRYPOINT ["/bin/bash"]
