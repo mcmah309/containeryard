@@ -129,7 +129,7 @@ A module consists of one file with one to two parts - a Containerfile section an
 \`\`\`
 
 ---
-Click [here](https://raw.githubusercontent.com/mcmah309/yard_module_repository/refs/heads/master/dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md) for an example. Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration.
+Click [here](https://raw.githubusercontent.com/mcmah309/yard_module_repository/refs/heads/master/dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md) for an example. Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
 
 ## Installation
 
