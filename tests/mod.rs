@@ -9,7 +9,7 @@ pub mod test {
             .arg("build")
             .assert();
         assert.failure();
-        
+
         // check the only file that exists is yard.yaml
         for entry in std::fs::read_dir("tests/conflicting_required_files").unwrap() {
             let entry = entry.unwrap();
