@@ -850,23 +850,15 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
             }
             continue;
         }
-        match capture_status {
-            Capture::None => {}
-            Capture::Containerfile | Capture::Config => {
-                capture.push_str(line);
-                capture.push_str("\n");
-            }
-        };
+        capture.push_str(line);
+        capture.push_str("\n");
     }
     return Ok(match (container_data, config_data) {
         (None, None) => {
-            if capture.is_empty() {
-                anyhow::bail!("Could not find containerfile or config in the module file")
-            } else {
-                ModuleData {
-                    containerfile: capture,
-                    config: String::new(),
-                }
+            // No sections found for either so interpret the entire file as a containerfile
+            ModuleData {
+                containerfile: capture,
+                config: String::new(),
             }
         }
         (None, Some(_)) => {
