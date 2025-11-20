@@ -656,9 +656,14 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
             }
             let args = raw_module.args.unwrap_or_default();
             let required_files = raw_module.required_files.unwrap_or_default();
-            let required_template_values: HashSet<String> = args.required.unwrap_or_default().into_iter().collect();
-            let optional_template_values: HashSet<String> = args.optional.unwrap_or_default().into_iter().collect();
-            for template_value in required_template_values.iter().chain(optional_template_values.iter()) {
+            let required_template_values: HashSet<String> =
+                args.required.unwrap_or_default().into_iter().collect();
+            let optional_template_values: HashSet<String> =
+                args.optional.unwrap_or_default().into_iter().collect();
+            for template_value in required_template_values
+                .iter()
+                .chain(optional_template_values.iter())
+            {
                 if !tera_accepts_ident(template_value) {
                     bail!(
                         "Template variable '{}' is not a valid identifier for a module argument.",
@@ -806,38 +811,52 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
     let mut capture_status = Capture::None;
     let mut capture = String::new();
     for line in data.lines() {
-        if line == "```yaml" {
+        let compare_line = line.trim().to_lowercase();
+        if compare_line == "```yaml" {
+            if config_data.is_some() {
+                continue;
+            }
             if capture_status != Capture::None {
                 anyhow::bail!("Found another config start line before finishing the previous one");
             }
-            capture.clear();
             capture_status = Capture::Config;
             continue;
-        } else if line.to_lowercase() == "```containerfile"
-            || line.to_lowercase() == "```dockerfile"
-        {
+        } else if compare_line == "```containerfile" || compare_line == "```dockerfile" {
+            if container_data.is_some() {
+                continue;
+            }
             if capture_status != Capture::None {
                 anyhow::bail!(
                     "Found another Containerfile start line before finishing the previous one"
                 );
             }
-            capture.clear();
             capture_status = Capture::Containerfile;
             continue;
         } else if line == "```" {
             match capture_status {
                 Capture::None => {
-                    anyhow::bail!("Found closing a closing line '```' without opening one")
+                    // Could be another documentation block ignore
                 }
-                Capture::Containerfile => container_data = Some(capture),
-                Capture::Config => config_data = Some(capture),
+                Capture::Containerfile => {
+                    container_data = Some(capture.clone());
+                    capture.clear();
+                    capture_status = Capture::None;
+                }
+                Capture::Config => {
+                    config_data = Some(capture.clone());
+                    capture.clear();
+                    capture_status = Capture::None;
+                }
             }
-            capture_status = Capture::None;
-            capture = String::new();
             continue;
         }
-        capture.push_str(line);
-        capture.push_str("\n");
+        match capture_status {
+            Capture::None => {}
+            Capture::Containerfile | Capture::Config => {
+                capture.push_str(line);
+                capture.push_str("\n");
+            }
+        };
     }
     return Ok(match (container_data, config_data) {
         (None, None) => {
