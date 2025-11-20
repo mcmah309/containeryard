@@ -648,10 +648,24 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
             let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
                 "Was able to serialize yaml, but was unable to convert to internal expected model.",
             )?;
+            fn tera_accepts_ident(name: &str) -> bool {
+                let template = format!("{{{{ {} }}}}", name);
+                let mut context = tera::Context::new();
+                context.insert(name, "");
+                tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e == "")
+            }
             let args = raw_module.args.unwrap_or_default();
             let required_files = raw_module.required_files.unwrap_or_default();
-            let required_template_values = args.required.unwrap_or_default().into_iter().collect();
-            let optional_template_values = args.optional.unwrap_or_default().into_iter().collect();
+            let required_template_values: HashSet<String> = args.required.unwrap_or_default().into_iter().collect();
+            let optional_template_values: HashSet<String> = args.optional.unwrap_or_default().into_iter().collect();
+            for template_value in required_template_values.iter().chain(optional_template_values.iter()) {
+                if !tera_accepts_ident(template_value) {
+                    bail!(
+                        "Template variable '{}' is not a valid identifier for a module argument.",
+                        template_value
+                    );
+                }
+            }
 
             for required_file in required_files.iter() {
                 is_local_absolute(&PathBuf::from(required_file))?;
