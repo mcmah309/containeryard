@@ -48,8 +48,8 @@ pub mod test {
             .current_dir("tests/output_order")
             .arg("output-order")
             .assert();
-        assert
-            .success()
-            .stdout(predicate::eq("base.Containerfile\napp.Containerfile\nfinal.Containerfile\n"));
+        assert.success().stdout(predicate::eq(
+            "base.Containerfile\napp.Containerfile\nfinal.Containerfile\n",
+        ));
     }
 }

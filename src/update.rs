@@ -36,8 +36,12 @@ pub fn update(path: &Path) -> anyhow::Result<()> {
                     );
                 }
                 let current_repo_url = captures.get(1).map_or("", |m| m.as_str()).to_string();
-                latest_commit = get_latest_commit_sha(&current_repo_url)
-                    .with_context(|| format!("Failure occurred at line number '{}' in {}", line_number, YARD_YAML_FILE_NAME))?
+                latest_commit = get_latest_commit_sha(&current_repo_url).with_context(|| {
+                    format!(
+                        "Failure occurred at line number '{}' in {}",
+                        line_number, YARD_YAML_FILE_NAME
+                    )
+                })?
             }
 
             // Check if the line matches the commit pattern
@@ -80,7 +84,12 @@ fn get_latest_commit_sha(repo_url: &str) -> anyhow::Result<String> {
         .arg(repo_url)
         .arg("HEAD")
         .output()
-        .map_err(|e| anyhow!("Failed to execute git command to retrieve latest commit: {}", e))?;
+        .map_err(|e| {
+            anyhow!(
+                "Failed to execute git command to retrieve latest commit: {}",
+                e
+            )
+        })?;
 
     if !output.status.success() {
         bail!(

@@ -120,8 +120,7 @@ impl GitProvider for GitProviderKind {
     ) -> anyhow::Result<String> {
         match self {
             GitProviderKind::Git(git) => {
-                git
-                    .extract_remote_path_data_save_save_to_cache(remote_path)
+                git.extract_remote_path_data_save_save_to_cache(remote_path)
                     .await
             }
         }
