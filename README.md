@@ -52,6 +52,8 @@ hooks:
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
+If you need the declared output filenames in order, `yard output-order` prints one output name per line. This is useful from scripts that want to process generated files in the same order as `yard.yaml`.
+
 ## Modules
 
 Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 

@@ -1,5 +1,6 @@
 #[cfg(test)]
 pub mod test {
+    use predicates::prelude::*;
 
     #[test]
     fn conflicting_required_files() {
@@ -38,5 +39,17 @@ pub mod test {
             .arg("build")
             .assert();
         assert.success();
+    }
+
+    #[test]
+    fn output_order() {
+        let assert = assert_cmd::Command::cargo_bin("yard")
+            .unwrap()
+            .current_dir("tests/output_order")
+            .arg("output-order")
+            .assert();
+        assert
+            .success()
+            .stdout(predicate::eq("base.Containerfile\napp.Containerfile\nfinal.Containerfile\n"));
     }
 }

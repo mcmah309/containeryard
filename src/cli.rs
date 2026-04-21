@@ -22,6 +22,12 @@ pub enum Commands {
         #[clap(long, default_value = "false")]
         do_not_refetch: bool
     },
+    /// Print output filenames in the order they are declared in `yard.yaml`.
+    OutputOrder {
+        /// Path to the `yard.yaml` file.
+        #[clap(default_value = ".")]
+        path: PathBuf,
+    },
     /// Initialize a `yard.yaml` file.
     Init {
         /// Path to initialize the `yard.yaml` file.

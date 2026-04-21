@@ -311,43 +311,54 @@ pub struct ModuleFileData {
     pub source_info: SourceInfoKind,
 }
 
-/// parse yard.yaml and validate that all referenced modules are declared
-async fn parse_yard_yaml(path: &Path) -> anyhow::Result<(YardFile, Option<String>)> {
+async fn load_yard_file(
+    compiled_schema: &Validator,
+    yard_file_path: &Path,
+) -> anyhow::Result<YamlYard> {
+    let yard_yaml_file_data = fs::read_to_string(yard_file_path)
+        .await
+        .with_context(|| format!("Could read '{}'.", yard_file_path.display()))?;
+    let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
+        .with_context(|| format!("{} is not valid yaml.", yard_file_path.display()))?;
+    validate_against_schema(compiled_schema, &yard_yaml)
+        .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
+    let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
+        format!(
+            "Was able to serialize '{}', but was unable to convert to internal expected model.",
+            yard_file_path.display()
+        )
+    })?;
+    Ok(yard_yaml)
+}
+
+fn yard_validator() -> Validator {
     let yard_schema: &'static str = include_str!("./schemas/yard-schema.json");
     let yard_schema: serde_json::Value =
         serde_json::from_str(yard_schema).expect("yard-module-schema.json is not valid json");
-    let compiled_schema = Validator::options()
+    let validator = Validator::options()
         .with_draft(Draft::Draft7)
         .build(&yard_schema)
         .expect("yard-schema.json is not a valid json schema");
-    let yard_file_path = path.join(YARD_YAML_FILE_NAME);
+    validator
+}
 
-    async fn load_yard_file(
-        compiled_schema: &Validator,
-        yard_file_path: &Path,
-    ) -> anyhow::Result<YamlYard> {
-        let yard_yaml_file_data = fs::read_to_string(yard_file_path)
-            .await
-            .with_context(|| format!("Could read '{}'.", yard_file_path.display()))?;
-        let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
-            .with_context(|| format!("{} is not valid yaml.", yard_file_path.display()))?;
-        validate_against_schema(compiled_schema, &yard_yaml)
-            .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
-        let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
-            format!(
-                "Was able to serialize '{}', but was unable to convert to internal expected model.",
-                yard_file_path.display()
-            )
-        })?;
-        Ok(yard_yaml)
-    }
-    let mut yard_yaml = load_yard_file(&compiled_schema, &yard_file_path).await?;
+pub async fn output_order(path: &Path) -> anyhow::Result<Vec<String>> {
+    let yard_file_path = path.join(YARD_YAML_FILE_NAME);
+    let validator = yard_validator();
+    let yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
+    Ok(yard_yaml.outputs.keys().cloned().collect())
+}
+
+/// parse yard.yaml and validate that all referenced modules are declared
+async fn parse_yard_yaml(path: &Path) -> anyhow::Result<(YardFile, Option<String>)> {
+    let validator = yard_validator();
+    let yard_file_path = path.join(YARD_YAML_FILE_NAME);
+    let yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
     let pre_build_hook: Option<&str> = (|| yard_yaml.hooks.as_ref()?.build.pre.as_deref())();
     if let Some(pre_build_hook) = pre_build_hook {
         duct_sh::sh_dangerous(pre_build_hook)
             .run()
             .with_context(|| format!("Pre-build hook `{pre_build_hook}` Failed"))?;
-        yard_yaml = load_yard_file(&compiled_schema, &yard_file_path).await?;
     }
 
     let mut input_remotes: Vec<RemoteModules> = Vec::new();

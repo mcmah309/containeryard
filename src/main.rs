@@ -10,7 +10,7 @@ mod update;
 
 use std::process::exit;
 
-use build::build;
+use build::{build, output_order};
 use clap::Parser;
 use cli::{Cli, Commands};
 use init::init;
@@ -32,14 +32,23 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let result: anyhow::Result<()> = match cli.command {
-        Commands::Build {
-            path,
-            do_not_refetch,
-        } => build(&path, do_not_refetch).await,
-        Commands::Init { path } => init(&path).await,
-        Commands::Update { path } => update(&path),
-    };
+    let result: anyhow::Result<()> = (move || async move {
+        match cli.command {
+            Commands::Build {
+                path,
+                do_not_refetch,
+            } => build(&path, do_not_refetch).await,
+            Commands::OutputOrder { path } => {
+                for output_name in output_order(&path).await? {
+                    println!("{output_name}");
+                }
+                Ok(())
+            }
+            Commands::Init { path } => init(&path).await,
+            Commands::Update { path } => update(&path),
+        }
+    })()
+    .await;
     if let Err(error) = result {
         eprintln!("Oops something went wrong.\n");
         eprintln!("{:?}", error);
