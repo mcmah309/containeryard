@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use const_format::formatcp;
+use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
 use serde::Deserialize;
 use tera::Tera;
@@ -85,7 +86,7 @@ pub struct YamlYard {
     pub hooks: Option<YamlHooks>,
     pub inputs: YamlInputs,
     /// Containerfile name to config
-    pub outputs: HashMap<String, Vec<YamlModuleType>>,
+    pub outputs: IndexMap<String, Vec<YamlModuleType>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -119,7 +120,7 @@ pub enum YamlModuleType {
     Inline(String),
     /// Module ref `- module_name:`
     /// Module ref with template values `- module_name: ...`
-    InputRef(HashMap<String, Option<HashMap<String, String>>>),
+    InputRef(IndexMap<String, Option<HashMap<String, String>>>),
 }
 
 // Intermediate  yard.yaml reprsentation
@@ -131,7 +132,7 @@ struct YardFile {
     /// Module name to path on local
     input_modules: HashMap<String, String>,
     /// Containerfile name to included modules
-    output_container_files: HashMap<String, Vec<UseModule>>,
+    output_container_files: IndexMap<String, Vec<UseModule>>,
 }
 
 /// Reference to a remote and containing modules
@@ -214,7 +215,7 @@ impl ModuleBuilder {
 /// All containerfile and their resolved modules. Ready to apply
 struct Containerfiles {
     /// Containerfile names to included modules
-    name_to_module: HashMap<String, Vec<Module>>,
+    name_to_module: IndexMap<String, Vec<Module>>,
 }
 
 /// The template Containerfile and config combined. Ready to apply
@@ -360,7 +361,7 @@ async fn parse_yard_yaml(path: &Path) -> anyhow::Result<(YardFile, Option<String
         }
     }
     let input_modules = yard_yaml.inputs.modules.unwrap_or_default();
-    let mut output_container_files: HashMap<String, Vec<UseModule>> = HashMap::new();
+    let mut output_container_files: IndexMap<String, Vec<UseModule>> = IndexMap::new();
     for (containerfile_name, output) in yard_yaml.outputs {
         let mut modules: Vec<UseModule> = Vec::new();
         for module in output {
@@ -455,7 +456,7 @@ async fn resolve_yard_yaml(
     resolve_additional_files(&modules, path, do_not_refetch)
         .await
         .context("Could not resolve additional required files")?;
-    let mut containerfiles_to_parts: HashMap<String, Vec<Module>> = HashMap::new();
+    let mut containerfiles_to_parts: IndexMap<String, Vec<Module>> = IndexMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
         for module_declaration in module_declarations {
@@ -793,7 +794,7 @@ fn apply_templates_and_labels(yard: Containerfiles) -> anyhow::Result<Outputs> {
 //************************************************************************//
 
 #[derive(PartialEq)]
-enum Capture {
+enum CapturingState {
     None,
     Containerfile,
     Config,
@@ -808,7 +809,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
     let data = fs::read_to_string(path).await?;
     let mut container_data = None;
     let mut config_data = None;
-    let mut capture_status = Capture::None;
+    let mut capture_status = CapturingState::None;
     let mut capture = String::new();
     for line in data.lines() {
         let compare_line = line.trim().to_lowercase();
@@ -816,42 +817,44 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
             if config_data.is_some() {
                 continue;
             }
-            if capture_status != Capture::None {
+            if capture_status != CapturingState::None {
                 anyhow::bail!("Found another config start line before finishing the previous one");
             }
-            capture_status = Capture::Config;
+            capture_status = CapturingState::Config;
             continue;
         } else if compare_line == "```containerfile" || compare_line == "```dockerfile" {
             if container_data.is_some() {
                 continue;
             }
-            if capture_status != Capture::None {
+            if capture_status != CapturingState::None {
                 anyhow::bail!(
                     "Found another Containerfile start line before finishing the previous one"
                 );
             }
-            capture_status = Capture::Containerfile;
+            capture_status = CapturingState::Containerfile;
             continue;
-        } else if line == "```" {
+        } else if compare_line == "```" {
             match capture_status {
-                Capture::None => {
+                CapturingState::None => {
                     // Could be another documentation block ignore
                 }
-                Capture::Containerfile => {
+                CapturingState::Containerfile => {
                     container_data = Some(capture.clone());
                     capture.clear();
-                    capture_status = Capture::None;
+                    capture_status = CapturingState::None;
                 }
-                Capture::Config => {
+                CapturingState::Config => {
                     config_data = Some(capture.clone());
                     capture.clear();
-                    capture_status = Capture::None;
+                    capture_status = CapturingState::None;
                 }
             }
             continue;
         }
-        capture.push_str(line);
-        capture.push_str("\n");
+        if capture_status != CapturingState::None {
+            capture.push_str(line);
+            capture.push_str("\n");
+        }
     }
     return Ok(match (container_data, config_data) {
         (None, None) => {

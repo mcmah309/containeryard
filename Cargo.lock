@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "containeryard"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -345,6 +345,7 @@ dependencies = [
  "dirs",
  "duct_sh",
  "futures",
+ "indexmap",
  "jsonschema",
  "predicates",
  "regex",
@@ -970,6 +971,7 @@ checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]

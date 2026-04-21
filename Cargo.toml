@@ -3,7 +3,7 @@ name = "containeryard"
 description = "Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers. Think Nix flakes meets Containerfiles (aka Dockerfiles)."
 authors = ["Henry McMahon"]
 license = "Apache-2.0"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 repository = "https://github.com/mcmah309/containeryard"
 rust-version = "1.80"
@@ -28,6 +28,7 @@ duct_sh = "0.13"
 futures = "0.3"
 regex = "1"
 tera = "1"
+indexmap = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
 assert_cmd = "2"
