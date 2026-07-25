@@ -38,7 +38,7 @@ async fn main() {
                 path,
                 do_not_refetch,
             } => build(&path, do_not_refetch).await,
-            Commands::OutputOrder { path } => {
+            Commands::Outputs { path } => {
                 for output_name in output_order(&path).await? {
                     println!("{output_name}");
                 }

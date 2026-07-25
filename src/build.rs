@@ -853,7 +853,7 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
         (None, None) => {
             // No sections found for either so interpret the entire file as a containerfile
             ModuleData {
-                containerfile: capture,
+                containerfile: data,
                 config: String::new(),
             }
         }
