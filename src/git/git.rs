@@ -1,13 +1,13 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
-use eros::{bail, Context};
+use eros::{Context, bail};
 use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
 
-use crate::build::{read_module_file, ModuleData, RemoteModuleInfo, SourceInfoKind};
+use crate::build::{ModuleData, RemoteModuleInfo, SourceInfoKind, read_module_file};
 
-use super::{path_in_cache_dir, GitProvider, ModuleFileData, ReferenceInfo};
+use super::{GitProvider, ModuleFileData, ReferenceInfo, path_in_cache_dir};
 
 /// Uses local `git` instance to clone and resolve references.
 #[derive(Debug)]
@@ -182,8 +182,7 @@ impl GitProvider for Git {
         // checkout commit
         trace!(
             "Checking out commit `{}` in repo `{}`",
-            self.commit,
-            self.url
+            self.commit, self.url
         );
         let checkout_output = Command::new("git")
             .args(["checkout", &self.commit])
@@ -209,14 +208,18 @@ impl GitProvider for Git {
         }
 
         // get file data
-        let remote_file_path = repo_dir.join(&remote_path);
+        let remote_file_path = repo_dir.join(remote_path);
         if !remote_file_path.is_file() {
-            bail!(
-                "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
-                &remote_path,
-                &self.url,
-                &self.commit
-            )
+            // Fs may need time for changes to actually appear
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            if !remote_file_path.is_file() {
+                bail!(
+                    "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
+                    &remote_path,
+                    &self.url,
+                    &self.commit
+                )
+            }
         }
 
         let file_data = fs::read_to_string(&remote_file_path)
