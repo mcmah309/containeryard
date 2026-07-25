@@ -5,8 +5,8 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use anyhow::{anyhow, bail, Context};
 use const_format::formatcp;
+use eros::{bail, Context};
 use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
 use serde::Deserialize;
@@ -18,7 +18,7 @@ use crate::git::{create_provider, GitProvider};
 
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 
-pub async fn build(path: &Path, do_not_refetch: bool) -> anyhow::Result<()> {
+pub async fn build(path: &Path, do_not_refetch: bool) -> eros::Result<()> {
     let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path)
         .await
         .context(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME))?;
@@ -178,25 +178,25 @@ struct ModuleBuilder {
 }
 
 impl ModuleBuilder {
-    fn build(self) -> anyhow::Result<Module> {
+    fn build(self) -> eros::Result<Module> {
         for var in self.required_template_values.iter() {
             if !self.provided_template_values.contains_key(var) {
-                bail!(format!(
+                bail!(
                     "Required variable '{}' not found for:\n{}",
                     var,
                     self.source_info.source_location()
-                ));
+                );
             }
         }
         for (var, val) in self.provided_template_values.iter() {
             if !self.required_template_values.contains(var)
                 && !self.optional_template_values.contains(var)
             {
-                bail!(format!(
+                bail!(
                     "Provided template variable '{}' not found in the module for:\n{}",
                     var,
                     self.source_info.source_location()
-                ));
+                );
             }
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
@@ -314,7 +314,7 @@ pub struct ModuleFileData {
 async fn load_yard_file(
     compiled_schema: &Validator,
     yard_file_path: &Path,
-) -> anyhow::Result<YamlYard> {
+) -> eros::Result<YamlYard> {
     let yard_yaml_file_data = fs::read_to_string(yard_file_path)
         .await
         .with_context(|| format!("Could read '{}'.", yard_file_path.display()))?;
@@ -342,7 +342,7 @@ fn yard_validator() -> Validator {
     validator
 }
 
-pub async fn output_order(path: &Path) -> anyhow::Result<Vec<String>> {
+pub async fn output_order(path: &Path) -> eros::Result<Vec<String>> {
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
     let validator = yard_validator();
     let yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
@@ -350,7 +350,7 @@ pub async fn output_order(path: &Path) -> anyhow::Result<Vec<String>> {
 }
 
 /// parse yard.yaml and validate that all referenced modules are declared
-async fn parse_yard_yaml(path: &Path) -> anyhow::Result<(YardFile, Option<String>)> {
+async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)> {
     let validator = yard_validator();
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
     let yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
@@ -412,7 +412,7 @@ async fn resolve_yard_yaml(
     yard_yaml: YardFile,
     path: &Path,
     do_not_refetch: bool,
-) -> anyhow::Result<Containerfiles> {
+) -> eros::Result<Containerfiles> {
     let YardFile {
         input_remotes,
         input_modules,
@@ -423,7 +423,7 @@ async fn resolve_yard_yaml(
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_modules {
         if module_names_are_unique_check.contains(&name) {
-            bail!(format!("A module with name '{}' is declared twice.", name));
+            bail!("A module with name '{}' is declared twice.", name);
         }
         module_names_are_unique_check.insert(name.clone());
         let module_data = read_module_file(&PathBuf::from(&path))
@@ -445,10 +445,7 @@ async fn resolve_yard_yaml(
     }
     for (name, path) in input_remotes.iter().flat_map(|e| e.name_to_path.iter()) {
         if module_names_are_unique_check.contains(&*name) {
-            anyhow::bail!(format!(
-                "A module named '{}' is declared more than once",
-                name
-            ))
+            eros::bail!("A module named '{}' is declared more than once", name)
         }
     }
 
@@ -489,10 +486,11 @@ async fn resolve_yard_yaml(
                 }
                 UseModule::Input(declared_module) => {
                     let module = modules.get(&declared_module.name).ok_or_else(|| {
-                        anyhow!(format!(
+                        eros::error!(
                             "Module '{}' is not declared as an input in the '{}' file.",
-                            declared_module.name, YARD_YAML_FILE_NAME
-                        ))
+                            declared_module.name,
+                            YARD_YAML_FILE_NAME
+                        )
                     })?;
                     let mut module = module.clone();
                     for (var, val) in declared_module.template_vars {
@@ -512,7 +510,7 @@ async fn resolve_yard_yaml(
 
 async fn download_remotes(
     remotes: Vec<RemoteModules>,
-) -> anyhow::Result<HashMap<String, ModuleFileData>> {
+) -> eros::Result<HashMap<String, ModuleFileData>> {
     let mut name_to_module_file_data: HashMap<String, ModuleFileData> = HashMap::new();
     for remote in remotes {
         let git_provider = create_provider(remote.url, remote.commit)?;
@@ -528,7 +526,7 @@ async fn resolve_additional_files(
     name_to_module: &HashMap<String, ModuleBuilder>,
     local_download_path_root: &Path,
     do_not_refetch: bool,
-) -> anyhow::Result<()> {
+) -> eros::Result<()> {
     for (name, module) in name_to_module {
         match module.source_info {
             SourceInfoKind::LocalModuleInfo(ref local) => {
@@ -569,34 +567,34 @@ async fn resolve_additional_files(
     Ok(())
 }
 
-fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> anyhow::Result<()> {
+fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> eros::Result<()> {
     for file in files {
         let file = file.as_ref();
         let path = PathBuf::from(file);
         is_local_absolute(&path)?;
         if !path.exists() {
-            bail!(format!(
+            bail!(
                 "Path '{}' does not exist, but it should at this point.",
                 file.display()
-            ));
+            );
         }
     }
     Ok(())
 }
 
 /// No "~" or ".."
-fn is_local_absolute(path: &Path) -> anyhow::Result<()> {
+fn is_local_absolute(path: &Path) -> eros::Result<()> {
     let error = || {
-        format!(
+        eros::error!(
             "Path '{}' is not valid. Paths must be relative containing no '~' or '..' components.",
             path.display()
         )
     };
     for component in path.components() {
         match component {
-            Component::Prefix(_) => bail!(error()),
-            Component::RootDir | Component::ParentDir => bail!(error()),
-            Component::Normal(os_str) if os_str == "~" => bail!(error()),
+            Component::Prefix(_) => return Err(error()),
+            Component::RootDir | Component::ParentDir => return Err(error()),
+            Component::Normal(os_str) if os_str == "~" => return Err(error()),
             _ => (),
         }
     }
@@ -605,7 +603,7 @@ fn is_local_absolute(path: &Path) -> anyhow::Result<()> {
 
 async fn validate_schema_and_create_module_builders(
     name_to_module_files_data: HashMap<String, ModuleFileData>,
-) -> anyhow::Result<HashMap<String, ModuleBuilder>> {
+) -> eros::Result<HashMap<String, ModuleBuilder>> {
     let yard_module_schema: &'static str = include_str!("./schemas/yard-module-schema.json");
     let yard_module_schema: serde_json::Value = serde_json::from_str(yard_module_schema)
         .expect("yard-module-schema.json is not valid json");
@@ -629,12 +627,12 @@ async fn validate_schema_and_create_module_builders(
             for required_file1 in &module1.required_files {
                 for required_file2 in &module2.required_files {
                     if required_file1 == required_file2 {
-                        bail!(format!(
+                        bail!(
                             "Required file '{}' is declared in both modules:\n{}\n{}\nIf put in the same place one would override the other.",
                             required_file1,
                             module1.source_info.source_location(),
                             module2.source_info.source_location()
-                        ));
+                        );
                     }
                 }
             }
@@ -645,12 +643,12 @@ async fn validate_schema_and_create_module_builders(
 }
 
 /// Validates and creates the internal module representation.
-async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow::Result<()>>(
+async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::Result<()>>(
     module_files: ModuleFileData,
     validate_module_schema_fn: F,
-) -> anyhow::Result<ModuleBuilder> {
+) -> eros::Result<ModuleBuilder> {
     let (required_files, required_template_values, optional_template_values) =
-        (|| -> anyhow::Result<_> {
+        (|| -> eros::Result<_> {
             let yard_module_yaml: serde_yaml::Value =
                 serde_yaml::from_str(&module_files.config_data)
                     .with_context(|| "yard-module-schema.json is not valid json.")?;
@@ -710,13 +708,13 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> anyhow:
 fn validate_against_schema(
     compiled_schema: &Validator,
     yaml: &serde_yaml::Value,
-) -> anyhow::Result<()> {
+) -> eros::Result<()> {
     let yaml_as_json = serde_json::to_value(&yaml)
         .context("Could not convert to json for validation against the schema.")?;
     compiled_schema
         .validate(&yaml_as_json)
         .map_err(|error| {
-            let context = format!(
+            eros::error!(
                 r#"Validation error: 
 
                 Issue: {}
@@ -730,8 +728,7 @@ fn validate_against_schema(
                 &error.instance,
                 &error.instance_path,
                 &error.schema_path
-            );
-            anyhow!(context)
+            )
         })
         .context("yaml does not follow the proper schema.")?;
     Ok(())
@@ -739,15 +736,14 @@ fn validate_against_schema(
 
 //************************************************************************//
 
-fn resolve_template_value(val: String) -> anyhow::Result<String> {
+fn resolve_template_value(val: String) -> eros::Result<String> {
     // shell command
     if val.starts_with("$(") && val.ends_with(")") {
         let command = &val[2..val.len() - 1];
         let output = duct_sh::sh_dangerous(command).read().map_err(|e| {
-            anyhow!(
+            eros::error!(
                 "Failed to execute command '{}' for template value: {}",
-                command,
-                e
+                command, e
             )
         })?;
         return Ok(output.trim().to_string());
@@ -768,7 +764,7 @@ fn resolve_template_value(val: String) -> anyhow::Result<String> {
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templates_and_labels(yard: Containerfiles) -> anyhow::Result<Outputs> {
+fn apply_templates_and_labels(yard: Containerfiles) -> eros::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(vec![]);
@@ -816,7 +812,7 @@ pub struct ModuleData {
     pub config: String,
 }
 
-pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
+pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
     let data = fs::read_to_string(path).await?;
     let mut container_data = None;
     let mut config_data = None;
@@ -829,7 +825,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
                 continue;
             }
             if capture_status != CapturingState::None {
-                anyhow::bail!("Found another config start line before finishing the previous one");
+                eros::bail!("Found another config start line before finishing the previous one");
             }
             capture_status = CapturingState::Config;
             continue;
@@ -838,7 +834,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
                 continue;
             }
             if capture_status != CapturingState::None {
-                anyhow::bail!(
+                eros::bail!(
                     "Found another Containerfile start line before finishing the previous one"
                 );
             }
@@ -876,7 +872,7 @@ pub async fn read_module_file(path: &Path) -> anyhow::Result<ModuleData> {
             }
         }
         (None, Some(_)) => {
-            anyhow::bail!("Found config in the module file, but no containerfile data")
+            eros::bail!("Found config in the module file, but no containerfile data")
         }
         (Some(container_data), None) => ModuleData {
             containerfile: container_data,

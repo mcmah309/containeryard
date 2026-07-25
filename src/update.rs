@@ -4,13 +4,13 @@ use std::path::Path;
 use std::process::Command;
 use std::{io, str};
 
-use anyhow::{anyhow, bail, Context};
+use eros::{bail, Context};
 
 use crate::build::YARD_YAML_FILE_NAME;
 
 /// Updates the `yard.yaml` file's "commit: <sha>" for each entry in the remote. Does not modify any other parts of the file
 /// Even saves comments if they exist on the comment line e.g. "commit: <sha> comment"
-pub fn update(path: &Path) -> anyhow::Result<()> {
+pub fn update(path: &Path) -> eros::Result<()> {
     let yard_file = path.join(YARD_YAML_FILE_NAME);
     let input_file = File::open(&yard_file)?;
     let reader = io::BufReader::new(input_file);
@@ -77,7 +77,7 @@ pub fn update(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_latest_commit_sha(repo_url: &str) -> anyhow::Result<String> {
+fn get_latest_commit_sha(repo_url: &str) -> eros::Result<String> {
     let output = Command::new("git")
         .arg("ls-remote")
         .arg("--symref")
@@ -85,7 +85,7 @@ fn get_latest_commit_sha(repo_url: &str) -> anyhow::Result<String> {
         .arg("HEAD")
         .output()
         .map_err(|e| {
-            anyhow!(
+            eros::error!(
                 "Failed to execute git command to retrieve latest commit: {}",
                 e
             )

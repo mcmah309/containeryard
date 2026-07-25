@@ -32,7 +32,7 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let result: anyhow::Result<()> = (move || async move {
+    let result: eros::Result<()> = (move || async move {
         match cli.command {
             Commands::Build {
                 path,

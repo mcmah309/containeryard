@@ -26,20 +26,20 @@ pub trait GitProvider {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFileData>>;
+    ) -> eros::Result<HashMap<String, ModuleFileData>>;
 
     /// Returns the reference information for this provider
     fn reference_info<'a>(&'a self) -> ReferenceInfo<'a>;
 
     /// Downloads the file and returns the data as a [String]
-    async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String>;
+    async fn extract_remote_path_data(&self, remote_path: &str) -> eros::Result<String>;
 
     /// Downloads the file or gets from cache and returns the data as a [String]. Caches locally if the
     /// data is downloaded for the first time
     async fn extract_remote_path_data_save_save_to_cache(
         &self,
         remote_path: &str,
-    ) -> anyhow::Result<String> {
+    ) -> eros::Result<String> {
         // Check if file is at cache, if so copy over
         let remote_path_as_path = PathBuf::from(remote_path);
         let reference_info = self.reference_info();
@@ -76,7 +76,7 @@ pub trait GitProvider {
         &self,
         remote_path: &str,
         local_download_path: &Path,
-    ) -> anyhow::Result<()> {
+    ) -> eros::Result<()> {
         let file_data = self
             .extract_remote_path_data_save_save_to_cache(remote_path)
             .await?;
@@ -96,7 +96,7 @@ impl GitProvider for GitProviderKind {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFileData>> {
+    ) -> eros::Result<HashMap<String, ModuleFileData>> {
         match self {
             GitProviderKind::Git(git) => git.retrieve_module(name_to_path).await,
         }
@@ -108,7 +108,7 @@ impl GitProvider for GitProviderKind {
         }
     }
 
-    async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String> {
+    async fn extract_remote_path_data(&self, remote_path: &str) -> eros::Result<String> {
         match self {
             GitProviderKind::Git(git) => git.extract_remote_path_data(remote_path).await,
         }
@@ -117,7 +117,7 @@ impl GitProvider for GitProviderKind {
     async fn extract_remote_path_data_save_save_to_cache(
         &self,
         remote_path: &str,
-    ) -> anyhow::Result<String> {
+    ) -> eros::Result<String> {
         match self {
             GitProviderKind::Git(git) => {
                 git.extract_remote_path_data_save_save_to_cache(remote_path)
@@ -127,7 +127,7 @@ impl GitProvider for GitProviderKind {
     }
 }
 
-pub fn create_provider(url: String, commit: String) -> anyhow::Result<GitProviderKind> {
+pub fn create_provider(url: String, commit: String) -> eros::Result<GitProviderKind> {
     // Note: Github does not support the `git archive`
     if url.contains("github.com") || url.contains("git@github.com") {
         return Ok(GitProviderKind::Git(Git::new(url, commit)?));
@@ -144,7 +144,7 @@ pub fn save_to_cache(
     owner: &str,
     repo_name: &str,
     commit: &str,
-) -> anyhow::Result<()> {
+) -> eros::Result<()> {
     let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
     if !cache_file_path.exists() {
         if let Some(parent) = cache_file_path.parent() {

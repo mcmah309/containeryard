@@ -13,7 +13,7 @@ name = "yard"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
+eros = "0.7"
 const_format = "0.2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

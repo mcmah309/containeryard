@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::{anyhow, bail, Context};
+use eros::{bail, Context};
 use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
@@ -20,7 +20,7 @@ pub struct Git {
 }
 
 impl Git {
-    pub fn new(url: String, commit: String) -> anyhow::Result<Self> {
+    pub fn new(url: String, commit: String) -> eros::Result<Self> {
         let RepoInfo {
             provider,
             owner,
@@ -40,7 +40,7 @@ impl GitProvider for Git {
     async fn retrieve_module(
         &self,
         name_to_path: HashMap<String, String>,
-    ) -> anyhow::Result<HashMap<String, ModuleFileData>> {
+    ) -> eros::Result<HashMap<String, ModuleFileData>> {
         let mut module_to_files: HashMap<String, ModuleFileData> = HashMap::new();
         for (name, module_path) in name_to_path.into_iter() {
             let module_path_cache = path_in_cache_dir(
@@ -96,7 +96,7 @@ impl GitProvider for Git {
         }
     }
 
-    async fn extract_remote_path_data(&self, remote_path: &str) -> anyhow::Result<String> {
+    async fn extract_remote_path_data(&self, remote_path: &str) -> eros::Result<String> {
         // Ensure repo is downloaded
         let provider_git_cache_dir = dirs::cache_dir()
             .expect("Could not determine cache directory of platform")
@@ -109,11 +109,11 @@ impl GitProvider for Git {
         let mut will_clone = false;
         if repo_dir.is_dir() {
             if !repo_dir.join(".git").is_dir() {
-                bail!(format!(
+                bail!(
                     "Cached directory for repo `{}` exists at `{}`, but it is not a git directory.",
                     self.url,
                     repo_dir.to_str().unwrap_or("")
-                ))
+                )
             }
             trace!("Found a git cloned repo for `{}`", self.url,);
         } else {
@@ -133,7 +133,7 @@ impl GitProvider for Git {
                 .output()
                 .await
                 .map_err(|e| {
-                    anyhow!(
+                    eros::error!(
                         "Failed to execute git command to clone {}:\n{}",
                         self.url,
                         e
@@ -161,7 +161,7 @@ impl GitProvider for Git {
                 .output()
                 .await
                 .map_err(|e| {
-                    anyhow!(
+                    eros::error!(
                         "Failed to execute git command to pull the latest for {}:\n{}",
                         self.url,
                         e
@@ -191,7 +191,7 @@ impl GitProvider for Git {
             .output()
             .await
             .map_err(|e| {
-                anyhow!(
+                eros::error!(
                     "Failed to execute git command to checkout {}:\n{}",
                     self.url,
                     e
@@ -211,15 +211,17 @@ impl GitProvider for Git {
         // get file data
         let remote_file_path = repo_dir.join(&remote_path);
         if !remote_file_path.is_file() {
-            bail!(format!(
+            bail!(
                 "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
-                &remote_path, &self.url, &self.commit
-            ))
+                &remote_path,
+                &self.url,
+                &self.commit
+            )
         }
 
         let file_data = fs::read_to_string(&remote_file_path)
             .await
-            .map_err(|e| anyhow::Error::from(e))
+            .map_err(|e| eros::error!(e))
             .with_context(|| format!("Could not read `{}`", &remote_file_path.display()))?;
 
         Ok(file_data)
@@ -232,7 +234,7 @@ struct RepoInfo {
     name: String,
 }
 
-fn url_to_repo_info(url: &str) -> anyhow::Result<RepoInfo> {
+fn url_to_repo_info(url: &str) -> eros::Result<RepoInfo> {
     let owner;
     let name;
     if url.starts_with("git@") {
@@ -240,9 +242,7 @@ fn url_to_repo_info(url: &str) -> anyhow::Result<RepoInfo> {
     } else if url.starts_with("http") {
         (owner, name) = extract_user_and_repo_from_http(url)?;
     } else {
-        bail!(format!(
-            "Unknown url type for `{url}`. Expected to start with `git@` or `http`"
-        ))
+        bail!("Unknown url type for `{url}`. Expected to start with `git@` or `http`")
     }
     let provider;
     if url.contains("github.com") {
@@ -257,7 +257,7 @@ fn url_to_repo_info(url: &str) -> anyhow::Result<RepoInfo> {
     })
 }
 
-fn extract_user_and_repo_from_ssh(ssh_url: &str) -> anyhow::Result<(String, String)> {
+fn extract_user_and_repo_from_ssh(ssh_url: &str) -> eros::Result<(String, String)> {
     let re = Regex::new(r"^[\w-]+@[\w.-]+:([\w-]+)/([\w-]+)(?:\.git)?$").unwrap();
     re.captures(ssh_url)
         .and_then(|caps| {
@@ -265,13 +265,13 @@ fn extract_user_and_repo_from_ssh(ssh_url: &str) -> anyhow::Result<(String, Stri
             let repo = caps.get(2).map(|m| m.as_str().to_string())?;
             Some((user, repo))
         })
-        .ok_or(anyhow!(format!(
+        .ok_or(eros::error!(
             "Could not extract user and repo from ssh url `{}`",
             ssh_url
-        )))
+        ))
 }
 
-fn extract_user_and_repo_from_http(url: &str) -> anyhow::Result<(String, String)> {
+fn extract_user_and_repo_from_http(url: &str) -> eros::Result<(String, String)> {
     let re = Regex::new(r"^https?://[\w.-]+/([\w-]+)/([\w-]+)(?:\.git)?$").unwrap();
     re.captures(url)
         .and_then(|caps| {
@@ -279,10 +279,10 @@ fn extract_user_and_repo_from_http(url: &str) -> anyhow::Result<(String, String)
             let repo = caps.get(2).map(|m| m.as_str().to_string())?;
             Some((user, repo))
         })
-        .ok_or(anyhow!(format!(
+        .ok_or(eros::error!(
             "Could not extract user and repo from url `{}`",
             url
-        )))
+        ))
 }
 
 // /// characters not allowed in dirs on windows and linux

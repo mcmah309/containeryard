@@ -106,12 +106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.98"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
-
-[[package]]
 name = "assert_cmd"
 version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -338,12 +332,12 @@ dependencies = [
 name = "containeryard"
 version = "0.3.5"
 dependencies = [
- "anyhow",
  "assert_cmd",
  "clap",
  "const_format",
  "dirs",
  "duct_sh",
+ "eros",
  "futures",
  "indexmap",
  "jsonschema",
@@ -503,6 +497,26 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "eros"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e79deb5442d1c7c12fd74ceddad5c63c30f736e079fe8b32def54c8a34de7f58"
+dependencies = [
+ "eros-macros",
+]
+
+[[package]]
+name = "eros-macros"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf122f9900df1627ba3570e1b2d078f7fc608ddfe2336c9eb49eaf31d51a77b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "fancy-regex"
