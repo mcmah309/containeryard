@@ -61,10 +61,7 @@ impl GitProvider for Git {
             assert!(module_path_cache.exists());
 
             let module_data: ModuleData =
-                read_module_file(&module_path_cache).await.context(format!(
-                    "Could not read '{}' as a module.",
-                    &module_path_cache.display()
-                ))?;
+                read_module_file(&module_path_cache).await?;
 
             let source_info = SourceInfoKind::RemoteModuleInfo(RemoteModuleInfo {
                 url: self.url.clone(),

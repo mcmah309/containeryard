@@ -6,7 +6,7 @@ use std::{
 };
 
 use const_format::formatcp;
-use eros::{bail, Context};
+use eros::{Context, bail};
 use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
 use serde::Deserialize;
@@ -14,25 +14,17 @@ use tera::Tera;
 use tokio::fs;
 use tracing::trace;
 
-use crate::git::{create_provider, GitProvider};
+use crate::git::{GitProvider, create_provider};
 
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 
 pub async fn build(path: &Path, do_not_refetch: bool) -> eros::Result<()> {
-    let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path)
-        .await
-        .context(formatcp!("Could not parse '{}'.", YARD_YAML_FILE_NAME))?;
-    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch)
-        .await
-        .context(formatcp!(
-            "Could not resolve all the fields in the parsed '{}' file",
-            YARD_YAML_FILE_NAME
-        ))?;
+    let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path).await?;
+    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch).await?;
     if resolved_yard_file.name_to_module.is_empty() {
         bail!("No modules were resolved.")
     }
-    let outputs = apply_templates_and_labels(resolved_yard_file)
-        .context("Could not apply templates".to_string())?;
+    let outputs = apply_templating(resolved_yard_file)?;
     if outputs.is_empty() {
         bail!("No Containerfiles where created.")
     }
@@ -350,6 +342,7 @@ pub async fn output_order(path: &Path) -> eros::Result<Vec<String>> {
 }
 
 /// parse yard.yaml and validate that all referenced modules are declared
+#[eros::context("Could not parse '{}'.", YARD_YAML_FILE_NAME)]
 async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)> {
     let validator = yard_validator();
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
@@ -408,6 +401,10 @@ async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)
 }
 
 /// resolve and validate fields in the yard.yaml file
+#[eros::context(
+    "Could not resolve all the fields in the parsed '{}' file",
+    YARD_YAML_FILE_NAME
+)]
 async fn resolve_yard_yaml(
     yard_yaml: YardFile,
     path: &Path,
@@ -426,14 +423,7 @@ async fn resolve_yard_yaml(
             bail!("A module with name '{}' is declared twice.", name);
         }
         module_names_are_unique_check.insert(name.clone());
-        let module_data = read_module_file(&PathBuf::from(&path))
-            .await
-            .with_context(|| {
-                format!(
-                    "Could not read '{}' as a module.",
-                    &PathBuf::from(&path).display()
-                )
-            })?;
+        let module_data = read_module_file(&PathBuf::from(&path)).await?;
         local_name_to_module_files_data.insert(
             name.clone(),
             ModuleFileData {
@@ -450,20 +440,14 @@ async fn resolve_yard_yaml(
     }
 
     let remote_name_to_module_files: HashMap<String, ModuleFileData> =
-        download_remotes(input_remotes)
-            .await
-            .context("Failed to download some remotes.")?;
+        retrieve_module_file_data(input_remotes).await?;
     local_name_to_module_files_data.extend(remote_name_to_module_files);
     let name_to_module_files_data = local_name_to_module_files_data;
     let modules: HashMap<String, ModuleBuilder> =
-        validate_schema_and_create_module_builders(name_to_module_files_data)
-            .await
-            .context("Could not resolve modules.")?;
+        validate_schema_and_create_module_builders(name_to_module_files_data).await?;
 
     // Resolve
-    resolve_additional_files(&modules, path, do_not_refetch)
-        .await
-        .context("Could not resolve additional required files")?;
+    resolve_additional_files(&modules, path, do_not_refetch).await?;
     let mut containerfiles_to_parts: IndexMap<String, Vec<Module>> = IndexMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
@@ -508,7 +492,8 @@ async fn resolve_yard_yaml(
     })
 }
 
-async fn download_remotes(
+#[eros::context("Could not retrieve module file data")]
+async fn retrieve_module_file_data(
     remotes: Vec<RemoteModules>,
 ) -> eros::Result<HashMap<String, ModuleFileData>> {
     let mut name_to_module_file_data: HashMap<String, ModuleFileData> = HashMap::new();
@@ -522,6 +507,7 @@ async fn download_remotes(
     Ok(name_to_module_file_data)
 }
 
+#[eros::context("Could not resolve additional required files")]
 async fn resolve_additional_files(
     name_to_module: &HashMap<String, ModuleBuilder>,
     local_download_path_root: &Path,
@@ -601,6 +587,7 @@ fn is_local_absolute(path: &Path) -> eros::Result<()> {
     Ok(())
 }
 
+#[eros::context("Could not resolve modules from the ")]
 async fn validate_schema_and_create_module_builders(
     name_to_module_files_data: HashMap<String, ModuleFileData>,
 ) -> eros::Result<HashMap<String, ModuleBuilder>> {
@@ -616,9 +603,8 @@ async fn validate_schema_and_create_module_builders(
 
     let mut modules: HashMap<String, ModuleBuilder> = HashMap::new();
     for (name, module_files) in name_to_module_files_data {
-        let module = validate_and_create_module_builder(module_files, validate_module_schema_fn)
-            .await
-            .context("Failed to validate and create module builder.")?;
+        let module =
+            validate_and_create_module_builder(module_files, validate_module_schema_fn).await?;
         modules.insert(name, module);
     }
 
@@ -662,7 +648,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
                 let template = format!("{{{{ {} }}}}", name);
                 let mut context = tera::Context::new();
                 context.insert(name.to_owned(), "");
-                tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e == "")
+                tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e.is_empty())
             }
             let args = raw_module.args.unwrap_or_default();
             let required_files = raw_module.required_files.unwrap_or_default();
@@ -695,7 +681,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
-        required_files: required_files,
+        required_files,
         required_template_values,
         optional_template_values,
         provided_template_values: HashMap::new(),
@@ -765,7 +751,7 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templates_and_labels(yard: Containerfiles) -> eros::Result<Outputs> {
+fn apply_templating(yard: Containerfiles) -> eros::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(Vec::<&str>::new());
@@ -814,6 +800,7 @@ pub struct ModuleData {
     pub config: String,
 }
 
+#[eros::context("Could not read '{}' as a module.", &PathBuf::from(&path).display())]
 pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
     let data = fs::read_to_string(path).await?;
     let mut container_data = None;
@@ -865,7 +852,7 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             capture.push_str("\n");
         }
     }
-    return Ok(match (container_data, config_data) {
+    Ok(match (container_data, config_data) {
         (None, None) => {
             // No sections found for either so interpret the entire file as a containerfile
             ModuleData {
@@ -884,5 +871,5 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             containerfile: container_data,
             config: config_data,
         },
-    });
+    })
 }
