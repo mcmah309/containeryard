@@ -203,19 +203,18 @@ impl GitProvider for Git {
             );
         }
 
+        // Fs may need time for changes to actually appear
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
         // get file data
         let remote_file_path = repo_dir.join(remote_path);
         if !remote_file_path.is_file() {
-            // Fs may need time for changes to actually appear
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            if !remote_file_path.is_file() {
-                bail!(
-                    "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
-                    &remote_path,
-                    &self.url,
-                    &self.commit
-                )
-            }
+            bail!(
+                "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
+                &remote_path,
+                &self.url,
+                &self.commit
+            )
         }
 
         let file_data = fs::read_to_string(&remote_file_path)
