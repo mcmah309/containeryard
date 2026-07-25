@@ -23,7 +23,7 @@ pub enum Commands {
         do_not_refetch: bool,
     },
     /// Print output filenames in the order they are declared in `yard.yaml`.
-    OutputOrder {
+    Outputs {
         /// Path to the `yard.yaml` file.
         #[clap(default_value = ".")]
         path: PathBuf,
