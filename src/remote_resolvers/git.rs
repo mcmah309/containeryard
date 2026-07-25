@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf};
 
 use eros::{Context, bail};
 use regex::Regex;
@@ -202,9 +202,6 @@ impl GitProvider for Git {
                 String::from_utf8_lossy(&checkout_output.stderr)
             );
         }
-
-        // Fs may need time for changes to actually appear
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // get file data
         let remote_file_path = repo_dir.join(remote_path);

@@ -344,12 +344,16 @@ pub async fn output_order(path: &Path) -> eros::Result<Vec<String>> {
 async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)> {
     let validator = yard_validator();
     let yard_file_path = path.join(YARD_YAML_FILE_NAME);
-    let yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
+    let mut yard_yaml = load_yard_file(&validator, &yard_file_path).await?;
     let pre_build_hook: Option<&str> = (|| yard_yaml.hooks.as_ref()?.build.pre.as_deref())();
     if let Some(pre_build_hook) = pre_build_hook {
         duct_sh::sh_dangerous(pre_build_hook)
             .run()
             .with_context(|| format!("Pre-build hook `{pre_build_hook}` Failed"))?;
+        // We need to reload in case the pre-build hook updates the file
+        yard_yaml = load_yard_file(&validator, &yard_file_path)
+            .await
+            .context("First load of yard file succeeded, second load failed")?;
     }
 
     let mut input_remotes: Vec<RemoteModules> = Vec::new();
