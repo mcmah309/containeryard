@@ -60,10 +60,9 @@ impl GitProvider for Git {
             }
             assert!(module_path_cache.exists());
 
-            let module_data: ModuleData =
-                read_module_file(&module_path_cache).await?;
+            let module_data: ModuleData = read_module_file(&module_path_cache).await?;
 
-            let source_info = SourceInfoKind::RemoteModuleInfo(RemoteModuleInfo {
+            let source_info = SourceInfoKind::Remote(RemoteModuleInfo {
                 url: self.url.clone(),
                 repo_owner: self.repo_owner.clone(),
                 repo_name: self.repo_name.clone(),
@@ -80,7 +79,7 @@ impl GitProvider for Git {
                 },
             );
         }
-        return Ok(module_to_files);
+        Ok(module_to_files)
     }
 
     fn reference_info<'a>(&'a self) -> ReferenceInfo<'a> {
@@ -244,12 +243,11 @@ fn url_to_repo_info(url: &str) -> eros::Result<RepoInfo> {
     } else {
         bail!("Unknown url type for `{url}`. Expected to start with `git@` or `http`")
     }
-    let provider;
-    if url.contains("github.com") {
-        provider = "github".to_string();
+    let provider = if url.contains("github.com") {
+        "github".to_string()
     } else {
-        provider = "unknown".to_string();
-    }
+        "unknown".to_string()
+    };
     Ok(RepoInfo {
         provider,
         owner,

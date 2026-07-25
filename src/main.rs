@@ -4,7 +4,7 @@
 mod build;
 mod cli;
 mod common;
-mod git;
+mod remote_resolvers;
 mod init;
 mod update;
 
@@ -32,7 +32,7 @@ async fn main() {
 
     let cli = Cli::parse();
 
-    let result: eros::Result<()> = (move || async move {
+    let result: eros::Result<()> = async move {
         match cli.command {
             Commands::Build {
                 path,
@@ -47,7 +47,7 @@ async fn main() {
             Commands::Init { path } => init(&path).await,
             Commands::Update { path } => update(&path),
         }
-    })()
+    }
     .await;
     if let Err(error) = result {
         eprintln!("Oops something went wrong.\n");

@@ -13,7 +13,7 @@ use tera::Tera;
 use tokio::fs;
 use tracing::trace;
 
-use crate::git::{GitProvider, create_provider};
+use crate::remote_resolvers::{GitProvider, create_provider};
 
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 
@@ -269,17 +269,17 @@ trait SourceInfo {
 /// Info about where data came from.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SourceInfoKind {
-    LocalModuleInfo(LocalModuleInfo),
-    RemoteModuleInfo(RemoteModuleInfo),
-    InlineModuleInfo(InlineModuleInfo),
+    Local(LocalModuleInfo),
+    Remote(RemoteModuleInfo),
+    Inline(InlineModuleInfo),
 }
 
 impl SourceInfoKind {
     fn label(&self) -> String {
         match self {
-            SourceInfoKind::LocalModuleInfo(info) => format!("{}: {}", &info.name, &info.path),
-            SourceInfoKind::RemoteModuleInfo(info) => format!("{}: {}", &info.name, &info.path),
-            SourceInfoKind::InlineModuleInfo(_) => "~INLINE~".to_owned(),
+            SourceInfoKind::Local(info) => format!("{}: {}", &info.name, &info.path),
+            SourceInfoKind::Remote(info) => format!("{}: {}", &info.name, &info.path),
+            SourceInfoKind::Inline(_) => "~INLINE~".to_owned(),
         }
     }
 }
@@ -287,9 +287,9 @@ impl SourceInfoKind {
 impl SourceInfo for SourceInfoKind {
     fn source_location(&self) -> String {
         match self {
-            SourceInfoKind::LocalModuleInfo(info) => info.source_location(),
-            SourceInfoKind::RemoteModuleInfo(info) => info.source_location(),
-            SourceInfoKind::InlineModuleInfo(info) => info.source_location(),
+            SourceInfoKind::Local(info) => info.source_location(),
+            SourceInfoKind::Remote(info) => info.source_location(),
+            SourceInfoKind::Inline(info) => info.source_location(),
         }
     }
 }
@@ -326,11 +326,10 @@ fn yard_validator() -> Validator {
     let yard_schema: &'static str = include_str!("./schemas/yard-schema.json");
     let yard_schema: serde_json::Value =
         serde_json::from_str(yard_schema).expect("yard-module-schema.json is not valid json");
-    let validator = Validator::options()
+    Validator::options()
         .with_draft(Draft::Draft7)
         .build(&yard_schema)
-        .expect("yard-schema.json is not a valid json schema");
-    validator
+        .expect("yard-schema.json is not a valid json schema")
 }
 
 pub async fn output_order(path: &Path) -> eros::Result<Vec<String>> {
@@ -428,12 +427,12 @@ async fn resolve_yard_yaml(
             ModuleFileData {
                 containerfile_data: module_data.containerfile,
                 config_data: module_data.config,
-                source_info: SourceInfoKind::LocalModuleInfo(LocalModuleInfo { path, name }),
+                source_info: SourceInfoKind::Local(LocalModuleInfo { path, name }),
             },
         );
     }
     for (name, path) in input_remotes.iter().flat_map(|e| e.name_to_path.iter()) {
-        if module_names_are_unique_check.contains(&*name) {
+        if module_names_are_unique_check.contains(name) {
             eros::bail!("A module named '{}' is declared more than once", name)
         }
     }
@@ -460,7 +459,7 @@ async fn resolve_yard_yaml(
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
                             provided_template_values: HashMap::new(),
-                            source_info: SourceInfoKind::InlineModuleInfo(InlineModuleInfo {
+                            source_info: SourceInfoKind::Inline(InlineModuleInfo {
                                 value: inline.value,
                             }),
                         }
@@ -514,14 +513,14 @@ async fn resolve_additional_files(
 ) -> eros::Result<()> {
     for (name, module) in name_to_module {
         match module.source_info {
-            SourceInfoKind::LocalModuleInfo(ref local) => {
+            SourceInfoKind::Local(ref local) => {
                 let local_file_path = local_download_path_root.join(&local.path);
                 validate_path_references(&[local_file_path])?;
             }
-            SourceInfoKind::RemoteModuleInfo(ref remote) => {
+            SourceInfoKind::Remote(ref remote) => {
                 let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
                 for file_path in module.required_files.iter() {
-                    let local_download_path = local_download_path_root.join(&file_path);
+                    let local_download_path = local_download_path_root.join(file_path);
                     if local_download_path.exists() && do_not_refetch {
                         println!(
                             "Note: '{}' is not refetched since it already exists and `--do-not-refetch` is set.",
@@ -546,7 +545,7 @@ async fn resolve_additional_files(
                         })?;
                 }
             }
-            SourceInfoKind::InlineModuleInfo(_) => {}
+            SourceInfoKind::Inline(_) => {}
         }
     }
     Ok(())
@@ -624,7 +623,7 @@ async fn validate_schema_and_create_module_builders(
         }
     }
 
-    return Ok(modules);
+    Ok(modules)
 }
 
 /// Validates and creates the internal module representation.
@@ -694,7 +693,7 @@ fn validate_against_schema(
     compiled_schema: &Validator,
     yaml: &serde_yaml::Value,
 ) -> eros::Result<()> {
-    let yaml_as_json = serde_json::to_value(&yaml)
+    let yaml_as_json = serde_json::to_value(yaml)
         .context("Could not convert to json for validation against the schema.")?;
     compiled_schema
         .validate(&yaml_as_json)
@@ -735,8 +734,7 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
         return Ok(output.trim().to_string());
     }
     // env var
-    if val.starts_with("$") {
-        let var = &val[1..];
+    if let Some(var) = val.strip_prefix("$") {
         let val = std::env::var(var)
             .with_context(|| format!("Could not get env var '{}' for template value.", var))?;
         return Ok(val);
@@ -848,7 +846,7 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
         }
         if capture_status != CapturingState::None {
             capture.push_str(line);
-            capture.push_str("\n");
+            capture.push('\n');
         }
     }
     Ok(match (container_data, config_data) {

@@ -55,16 +55,16 @@ pub trait GitProvider {
             "`{:?}` not found in cache, downloading from remote",
             reference_info
         );
-        let file_data = self.extract_remote_path_data(&remote_path).await?;
+        let file_data = self.extract_remote_path_data(remote_path).await?;
 
         trace!("Saving `{:?}` downloaded from remote", reference_info);
         save_to_cache(
             &file_data,
             &remote_path_as_path,
-            &provider,
-            &repo_owner,
-            &repo_name,
-            &commit,
+            provider,
+            repo_owner,
+            repo_name,
+            commit,
         )?;
         trace!("`{:?}` saved to cache", reference_info);
 
@@ -147,10 +147,10 @@ pub fn save_to_cache(
 ) -> eros::Result<()> {
     let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
     if !cache_file_path.exists() {
-        if let Some(parent) = cache_file_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = cache_file_path.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
         std::fs::write(cache_file_path, data)?;
     }
@@ -168,9 +168,9 @@ pub fn path_in_cache_dir(
         .expect("Could not determine cache directory of platform")
         .join("containeryard")
         .join("extracted_files")
-        .join(&provider)
-        .join(&owner)
-        .join(&repo_name)
-        .join(&commit)
-        .join(&file_path)
+        .join(provider)
+        .join(owner)
+        .join(repo_name)
+        .join(commit)
+        .join(file_path)
 }

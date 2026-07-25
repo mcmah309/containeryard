@@ -6,5 +6,5 @@ pub fn is_debug() -> bool {
             .map(|v| v != "0")
             .unwrap_or(false)
     });
-    IS_DEBUG.clone()
+    *IS_DEBUG
 }
