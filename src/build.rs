@@ -661,7 +661,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             fn tera_accepts_ident(name: &str) -> bool {
                 let template = format!("{{{{ {} }}}}", name);
                 let mut context = tera::Context::new();
-                context.insert(name, "");
+                context.insert(name.to_owned(), "");
                 tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e == "")
             }
             let args = raw_module.args.unwrap_or_default();
@@ -725,9 +725,9 @@ fn validate_against_schema(
 
                 Schema Property Violated: {}"#,
                 &error.to_string(),
-                &error.instance,
-                &error.instance_path,
-                &error.schema_path
+                &error.instance(),
+                &error.instance_path(),
+                &error.schema_path()
             )
         })
         .context("yaml does not follow the proper schema.")?;
@@ -743,7 +743,8 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
         let output = duct_sh::sh_dangerous(command).read().map_err(|e| {
             eros::error!(
                 "Failed to execute command '{}' for template value: {}",
-                command, e
+                command,
+                e
             )
         })?;
         return Ok(output.trim().to_string());
@@ -767,8 +768,8 @@ type Outputs = Vec<(String, String)>;
 fn apply_templates_and_labels(yard: Containerfiles) -> eros::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
-    tera.autoescape_on(vec![]);
-    tera.set_escape_fn(|e| e.to_string());
+    tera.autoescape_on(Vec::<&str>::new());
+    tera.set_escape_fn(|e, writer| writer.write(e.as_bytes()).map(|_| ()));
 
     let mut outputs = Vec::new();
     let mut container_file_resolved_parts = Vec::new();
@@ -778,7 +779,8 @@ fn apply_templates_and_labels(yard: Containerfiles) -> eros::Result<Outputs> {
             for (var, val) in included_module.provided_template_values {
                 context.insert(var, &val);
             }
-            let rendered_part = tera.render_str(&included_module.containerfile_template, &context);
+            let rendered_part =
+                tera.render_str(&included_module.containerfile_template, &context, false);
             let rendered_part = match rendered_part {
                 Ok(val) => val,
                 Err(e) => Err(e).with_context(|| {

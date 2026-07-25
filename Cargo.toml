@@ -4,9 +4,8 @@ description = "Container Yard is a declarative, reproducible, and reusable decen
 authors = ["Henry McMahon"]
 license = "Apache-2.0"
 version = "0.3.6"
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/mcmah309/containeryard"
-rust-version = "1.80"
 
 [[bin]]
 name = "yard"
@@ -19,15 +18,15 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-jsonschema = "0.26"
-dirs = "5"
+jsonschema = "0.48"
+dirs = "6"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-duct_sh = "0.13"
+duct_sh = "1"
 futures = "0.3"
 regex = "1"
-tera = "1"
+tera = "2"
 indexmap = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
