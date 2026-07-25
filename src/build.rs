@@ -5,7 +5,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use const_format::formatcp;
 use eros::{Context, bail};
 use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
