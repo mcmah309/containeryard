@@ -17,13 +17,17 @@ use crate::remote_resolvers::{GitProvider, create_provider};
 
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 
-pub async fn build(path: &Path, do_not_refetch: bool) -> eros::Result<()> {
+pub async fn build(
+    path: &Path,
+    do_not_refetch: bool,
+    with_cache_busting: bool,
+) -> eros::Result<()> {
     let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path).await?;
     let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch).await?;
     if resolved_yard_file.name_to_module.is_empty() {
         bail!("No modules were resolved.")
     }
-    let outputs = apply_templating(resolved_yard_file)?;
+    let outputs = apply_templating(resolved_yard_file, with_cache_busting)?;
     if outputs.is_empty() {
         bail!("No Containerfiles where created.")
     }
@@ -166,6 +170,8 @@ struct ModuleBuilder {
     provided_template_values: HashMap<String, String>,
     /// source info for better errors
     source_info: SourceInfoKind,
+    /// Module name for cache-busting aliases (None if not applicable)
+    name: Option<String>,
 }
 
 impl ModuleBuilder {
@@ -196,6 +202,7 @@ impl ModuleBuilder {
             containerfile_template: self.containerfile_data,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
+            name: self.name,
         })
     }
 }
@@ -216,6 +223,8 @@ struct Module {
     provided_template_values: HashMap<String, String>,
     /// source info for better errors
     source_info: SourceInfoKind,
+    /// Module name used for cache-busting aliases (None if not applicable)
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -453,9 +462,12 @@ async fn resolve_yard_yaml(
     let mut containerfiles_to_parts: IndexMap<String, Vec<Module>> = IndexMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
+        let mut inline_counter = 0u32;
         for module_declaration in module_declarations {
             match module_declaration {
                 UseModule::Inline(inline) => {
+                    let synthetic_name = format!("inline_{inline_counter}");
+                    inline_counter += 1;
                     modules_for_container_file.push(
                         ModuleBuilder {
                             containerfile_data: inline.value.clone(),
@@ -466,6 +478,7 @@ async fn resolve_yard_yaml(
                             source_info: SourceInfoKind::Inline(InlineModuleInfo {
                                 value: inline.value,
                             }),
+                            name: Some(synthetic_name),
                         }
                         .build()?,
                     );
@@ -479,6 +492,7 @@ async fn resolve_yard_yaml(
                         )
                     })?;
                     let mut module = module.clone();
+                    module.name = Some(declared_module.name.clone());
                     for (var, val) in declared_module.template_vars {
                         let val = resolve_template_value(val)?;
                         module.provided_template_values.insert(var, val);
@@ -688,6 +702,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         optional_template_values,
         provided_template_values: HashMap::new(),
         source_info: module_files.source_info,
+        name: None,
     })
 }
 
@@ -752,7 +767,7 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templating(yard: Containerfiles) -> eros::Result<Outputs> {
+fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Result<Outputs> {
     let mut tera = Tera::default();
     // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
     tera.autoescape_on(Vec::<&str>::new());
@@ -777,8 +792,18 @@ fn apply_templating(yard: Containerfiles) -> eros::Result<Outputs> {
                     )
                 })?,
             };
+            let mut rendered_part = rendered_part.trim().to_string();
             let label = included_module.source_info.label();
-            let part = format!("####  {label}  ####\n\n{}\n", rendered_part.trim());
+
+            if with_cache_busting {
+                let module_name = included_module
+                    .name
+                    .as_deref()
+                    .expect("Should be provided at this point");
+                rendered_part = apply_cache_busting(&rendered_part, module_name);
+            }
+
+            let part = format!("####  {label}  ####\n\n{rendered_part}\n");
             container_file_resolved_parts.push(part);
         }
         outputs.push((containerfile_name, container_file_resolved_parts.join("\n")));
@@ -873,4 +898,9 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             config: config_data,
         },
     })
+}
+
+fn apply_cache_busting(containerfile: &str, module_name: &str) -> String {
+    let module_name = module_name.replace("-", "_").to_uppercase();
+    format!("ARG CACHE_BUST_{module_name}=1\n{containerfile}")
 }

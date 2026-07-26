@@ -37,7 +37,8 @@ async fn main() {
             Commands::Build {
                 path,
                 do_not_refetch,
-            } => build(&path, do_not_refetch).await,
+                with_cache_busting,
+            } => build(&path, do_not_refetch, with_cache_busting).await,
             Commands::Outputs { path } => {
                 for output_name in output_order(&path).await? {
                     println!("{output_name}");

@@ -21,6 +21,9 @@ pub enum Commands {
         /// get overriden.
         #[clap(long, default_value = "false")]
         do_not_refetch: bool,
+        /// If set, cache busting `ARG` statements are injected before each module. This allows busting build cache for specific modules.
+        #[clap(long, default_value = "false")]
+        with_cache_busting: bool,
     },
     /// Print output filenames in the order they are declared in `yard.yaml`.
     Outputs {
