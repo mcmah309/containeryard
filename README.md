@@ -143,7 +143,7 @@ For more module examples click [here](https://github.com/mcmah309/yard_module_re
 
 ### Independent Modules
 
-Certain builders like doecker's buildkit can parallelize builds for faster building and smaller images. Independent modules take advantage of this. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
+Certain builders like docker's buildkit can parallelize builds for faster building and smaller images. Independent modules take advantage of this. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
 
 When modules are combined, the **build stages of all independent modules are hoisted to the start** of the generated Containerfile, and the **install stage is injected where the module is declared** in the `yard.yaml` outputs (like a normal module). This is useful for defining dependencies in isolated build stages (e.g. a virtual environment built in a `builder` stage) and copying the result into the final image.
 
