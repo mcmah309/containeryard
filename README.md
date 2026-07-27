@@ -233,7 +233,7 @@ Consider adding `--profile dist` for a longer compile time but a more optimal bu
 
 ## Extra
 
-## Hooks
+### Hooks
 
 Hooks can be use in `yard.yaml` to run before or after `yard build`
 ```yaml
@@ -246,7 +246,7 @@ hooks:
 ```
 `yard update` is a good hook since it keeps versions up to date with any remotes.
 
-## Yard Output
+### Yard Output
 
 If you need the declared output filenames in order, `yard outputs` prints one output name per line. This is useful from scripts that want to process generated files in the same order as `yard.yaml`. e.g. in a `post_yard_build.sh` script:
 ```sh
