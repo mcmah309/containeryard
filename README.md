@@ -97,15 +97,19 @@ The configuration component is a `yaml` block and provides metadata for what the
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
 description: "This is a modules description"
+# Files to be pulled in with this module
 args:
   required:
   optional:
     - version
 # Files to be pulled in with this module
 required_files:
-# Optional: mark this module as an independent module. See "Independent Modules" below.
-# independent: true
+  - file/path
+# Is this module an independent module
+independent: true
 ```
+All of the above settings are optional
+
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.
 ```yaml
