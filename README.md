@@ -207,7 +207,7 @@ RUN echo after
 ```
 
 #### Module File Format
-A module consists of one file with one to two parts - a Containerfile section and an optional config section.
+A module consists of one file with one to two parts - an optional config section and a Containerfile section.
 
 ````markdown
 ```yaml
