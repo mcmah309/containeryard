@@ -7,10 +7,10 @@
 ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. 
 See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 
-ContainerYard breaks a containers definition into [modules](#modules) and composes them with a [yard file](#yardyaml). 
+ContainerYard breaks a containers definition into [modules](#module-files) and composes them with a [yard file](#yardyaml). 
 
 ## Yard File
-A yard file (`yard.yaml`) composes [modules](#modules) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)). E.g.
+A yard file (`yard.yaml`) composes [modules](#module-files) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)). E.g.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
@@ -70,7 +70,7 @@ podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
 
 Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
 
-## Modules
+## Module Files
 
 Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 
 Modules can be easily reused, improved, and version controlled.
@@ -103,6 +103,8 @@ args:
     - version
 # Files to be pulled in with this module
 required_files:
+# Optional: mark this module as an independent module. See "Independent Modules" below.
+# independent: true
 ```
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.
@@ -130,24 +132,117 @@ RUN apk update \
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
-#### Module Layout
+### Independent Modules
+
+Independent modules are modules that can be built in any order. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
+
+When modules are combined, the **build stages of all independent modules are hoisted to the start** of the generated Containerfile, and the **install stage is injected where the module is declared** in the `yard.yaml` outputs (like a normal module). This is useful for defining dependencies in isolated build stages (e.g. a virtual environment built in a `builder` stage) and copying the result into the final image.
+
+For example, given an independent module `python-deps` (`python_deps.md`):
+
+````markdown
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
+
+description: "Python dependencies installed in an independent build stage"
+independent: true
+```
+```dockerfile
+# Build & install dependencies
+FROM python:3.11-slim AS builder
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir numpy pandas scipy
+```
+```dockerfile
+# Copy the entire virtual environment
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+```
+````
+
+and a `yard.yaml`:
+
+```yaml
+inputs:
+  modules:
+    python-deps: python_deps.md
+
+outputs:
+  out.Containerfile:
+    - FROM python:3.11-slim
+    - RUN echo before
+    - python-deps:
+    - RUN echo after
+```
+
+the generated `out.Containerfile` would be:
+
+```dockerfile
+# Build & install dependencies
+FROM python:3.11-slim AS builder
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir numpy pandas scipy
+
+FROM python:3.11-slim
+
+RUN echo before
+
+# Copy the entire virtual environment
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN echo after
+```
+
+#### Module File Format
 A module consists of one file with one to two parts - a Containerfile section and an optional config section.
 
----
-\`\`\`dockerfile
+````markdown
+```dockerfile
 
-\# Dockerfile Statements Here
+# Dockerfile Statements Here
 
-\`\`\`
+```
+```yaml
 
-\`\`\`yaml
+# Configuration here
 
-\# Configuration here
-
-\`\`\`
+```
+````
 
 ---
 Click [here](https://raw.githubusercontent.com/mcmah309/yard_module_repository/refs/heads/master/dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md) for an example. Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
+
+For [independent modules](#independent-modules), the file instead has two Containerfile sections (the build stage and the install stage) plus the optional config section:
+
+---
+\`\`\`yaml
+
+\# Configuration here (with `independent: true`)
+
+\`\`\`
+
+\`\`\`dockerfile
+
+\# Build stage (Dockerfile Statements Here)
+
+\`\`\`
+
+\`\`\`dockerfile
+
+\# Install stage (Dockerfile Statements Here)
+
+\`\`\`
+
+---
 
 ## Installation
 

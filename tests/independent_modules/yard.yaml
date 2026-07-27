@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
+
+inputs:
+  modules:
+    python_deps: python_deps.md
+
+outputs:
+  out.Containerfile:
+    - FROM python:3.11-slim
+    - python_deps:
+    - RUN echo hello

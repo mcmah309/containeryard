@@ -12,6 +12,11 @@
           "type": "string",
           "description": "This is a modules description"
         },
+        "independent": {
+          "type": "boolean",
+          "description": "If true, this module is an independent module. Independent modules have a build stage and an install stage, defined by two containerfile/dockerfile blocks. The build stage is hoisted to the start of the generated Containerfile and the install stage is injected where the module is declared. Defaults to false.",
+          "default": false
+        },
         "args": {
           "type": "object",
           "properties": {

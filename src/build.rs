@@ -62,6 +62,12 @@ pub struct YamlModule {
     pub args: Option<YamlArgs>,
     /// This is a modules description
     pub description: Option<String>,
+    /// If true, this module is an independent module. Independent modules have a build stage
+    /// and an install stage, defined by two containerfile/dockerfile blocks. The build stage is
+    /// hoisted to the start of the generated Containerfile and the install stage is injected where
+    /// the module is declared. Defaults to false.
+    #[serde(default)]
+    pub independent: bool,
     /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
     pub required_files: Option<Vec<String>>,
 }
@@ -164,6 +170,10 @@ struct UseInputModule {
 #[derive(Debug, Clone)]
 struct ModuleBuilder {
     containerfile_data: String,
+    /// Install stage template for independent modules. `None` for non-independent modules.
+    install_stage_data: Option<String>,
+    /// Whether this module is an independent module.
+    independent: bool,
     required_files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
@@ -198,8 +208,16 @@ impl ModuleBuilder {
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
         validate_path_references(&self.required_files)?;
+        if self.independent && self.install_stage_data.is_none() {
+            bail!(
+                "Module is marked as independent (`independent: true`), but no install stage was found. Independent modules require two containerfile/dockerfile blocks - the first is the build stage and the second is the install stage.\n{}",
+                self.source_info.source_location()
+            );
+        }
         Ok(Module {
             containerfile_template: self.containerfile_data,
+            install_stage_template: self.install_stage_data,
+            independent: self.independent,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
             name: self.name,
@@ -220,6 +238,10 @@ struct Containerfiles {
 #[derive(Debug, Clone)]
 struct Module {
     containerfile_template: String,
+    /// Install stage template for independent modules. `None` for non-independent modules.
+    install_stage_template: Option<String>,
+    /// Whether this module is an independent module.
+    independent: bool,
     provided_template_values: HashMap<String, String>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -308,6 +330,8 @@ impl SourceInfo for SourceInfoKind {
 pub struct ModuleFileData {
     pub containerfile_data: String,
     pub config_data: String,
+    /// Install stage for independent modules. `None` for non-independent modules.
+    pub install_stage_data: Option<String>,
     pub source_info: SourceInfoKind,
 }
 
@@ -440,6 +464,7 @@ async fn resolve_yard_yaml(
             ModuleFileData {
                 containerfile_data: module_data.containerfile,
                 config_data: module_data.config,
+                install_stage_data: module_data.install_stage,
                 source_info: SourceInfoKind::Local(LocalModuleInfo { path, name }),
             },
         );
@@ -462,6 +487,7 @@ async fn resolve_yard_yaml(
     let mut containerfiles_to_parts: IndexMap<String, Vec<Module>> = IndexMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
+        let mut seen_module_names: HashSet<String> = HashSet::new();
         let mut inline_counter = 0u32;
         for module_declaration in module_declarations {
             match module_declaration {
@@ -471,6 +497,8 @@ async fn resolve_yard_yaml(
                     modules_for_container_file.push(
                         ModuleBuilder {
                             containerfile_data: inline.value.clone(),
+                            install_stage_data: None,
+                            independent: false,
                             required_files: Vec::new(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
@@ -484,6 +512,13 @@ async fn resolve_yard_yaml(
                     );
                 }
                 UseModule::Input(declared_module) => {
+                    if !seen_module_names.insert(declared_module.name.clone()) {
+                        bail!(
+                            "Module '{}' is declared more than once in the output '{}'. Each input module may only be declared once per output.",
+                            declared_module.name,
+                            container_file_name
+                        );
+                    }
                     let module = modules.get(&declared_module.name).ok_or_else(|| {
                         eros::error!(
                             "Module '{}' is not declared as an input in the '{}' file.",
@@ -649,11 +684,16 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
     module_files: ModuleFileData,
     validate_module_schema_fn: F,
 ) -> eros::Result<ModuleBuilder> {
-    let (required_files, required_template_values, optional_template_values) =
+    let (required_files, required_template_values, optional_template_values, independent) =
         (|| -> eros::Result<_> {
-            let yard_module_yaml: serde_yaml::Value =
+            // If there is no config block, default to a non-independent module.
+            let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty()
+            {
+                serde_yaml::Value::Null
+            } else {
                 serde_yaml::from_str(&module_files.config_data)
-                    .with_context(|| "yard-module-schema.json is not valid json.")?;
+                    .with_context(|| "yard-module-schema.json is not valid json.")?
+            };
 
             validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
 
@@ -691,12 +731,15 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
                 required_files,
                 required_template_values,
                 optional_template_values,
+                raw_module.independent,
             ))
         })()
         .with_context(|| module_files.source_info.source_location())?;
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
+        install_stage_data: module_files.install_stage_data,
+        independent,
         required_files,
         required_template_values,
         optional_template_values,
@@ -773,41 +816,95 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
     tera.autoescape_on(Vec::<&str>::new());
     tera.set_escape_fn(|e, writer| writer.write(e.as_bytes()).map(|_| ()));
 
-    let mut outputs = Vec::new();
-    let mut container_file_resolved_parts = Vec::new();
-    for (containerfile_name, included_modules) in yard.name_to_module {
-        for included_module in included_modules {
-            let mut context = tera::Context::new();
-            for (var, val) in included_module.provided_template_values {
-                context.insert(var, &val);
-            }
-            let rendered_part =
-                tera.render_str(&included_module.containerfile_template, &context, false);
-            let rendered_part = match rendered_part {
-                Ok(val) => val,
-                Err(e) => Err(e).with_context(|| {
-                    format!(
-                        "Could not render template for Containerfile part found at:\n{}",
-                        included_module.source_info.source_location(),
-                    )
-                })?,
-            };
-            let mut rendered_part = rendered_part.trim().to_string();
-            let label = included_module.source_info.label();
-
-            if with_cache_busting {
-                let module_name = included_module
-                    .name
-                    .as_deref()
-                    .expect("Should be provided at this point");
-                rendered_part = apply_cache_busting(&rendered_part, module_name);
-            }
-
-            let part = format!("####  {label}  ####\n\n{rendered_part}\n");
-            container_file_resolved_parts.push(part);
+    /// Renders a single template with the provided values, attaching source info on error.
+    fn render(
+        tera: &Tera,
+        template: &str,
+        provided_template_values: &HashMap<String, String>,
+        source_info: &SourceInfoKind,
+    ) -> eros::Result<String> {
+        let mut context = tera::Context::new();
+        for (var, val) in provided_template_values {
+            context.insert(var.clone(), val);
         }
-        outputs.push((containerfile_name, container_file_resolved_parts.join("\n")));
-        container_file_resolved_parts.clear();
+        let rendered = tera.render_str(template, &context, false);
+        let rendered = match rendered {
+            Ok(val) => val,
+            Err(e) => Err(e).with_context(|| {
+                format!(
+                    "Could not render template for Containerfile part found at:\n{}",
+                    source_info.source_location(),
+                )
+            })?,
+        };
+        Ok(rendered.trim().to_string())
+    }
+
+    let mut outputs = Vec::new();
+    for (containerfile_name, included_modules) in yard.name_to_module {
+        // Build stages of independent modules are hoisted to the start of the Containerfile.
+        let mut build_stage_parts: Vec<String> = Vec::new();
+        let mut container_file_resolved_parts = Vec::new();
+        for included_module in included_modules {
+            let label = included_module.source_info.label();
+            if included_module.independent {
+                // Hoist the build stage to the start.
+                let mut build_stage = render(
+                    &tera,
+                    &included_module.containerfile_template,
+                    &included_module.provided_template_values,
+                    &included_module.source_info,
+                )?;
+                if with_cache_busting {
+                    let name = included_module
+                        .name
+                        .as_deref()
+                        .expect("Should be provided at this point");
+                    build_stage = apply_cache_busting(&build_stage, name);
+                }
+                let part = format!("####  {label} (build stage)  ####\n\n{build_stage}\n");
+                build_stage_parts.push(part);
+                // Inject the install stage where the module is declared.
+                let install_template = included_module
+                    .install_stage_template
+                    .as_ref()
+                    .expect("Independent modules must have an install stage; this is checked in ModuleBuilder::build");
+                let mut install_stage = render(
+                    &tera,
+                    install_template,
+                    &included_module.provided_template_values,
+                    &included_module.source_info,
+                )?;
+                if with_cache_busting {
+                    let name = included_module
+                        .name
+                        .as_deref()
+                        .expect("Should be provided at this point");
+                    install_stage = apply_cache_busting(&install_stage, name);
+                }
+                let part = format!("####  {label} (install stage)  ####\n\n{install_stage}\n");
+                container_file_resolved_parts.push(part);
+            } else {
+                let mut rendered_part = render(
+                    &tera,
+                    &included_module.containerfile_template,
+                    &included_module.provided_template_values,
+                    &included_module.source_info,
+                )?;
+                if with_cache_busting {
+                    let module_name = included_module
+                        .name
+                        .as_deref()
+                        .expect("Should be provided at this point");
+                    rendered_part = apply_cache_busting(&rendered_part, module_name);
+                }
+                let part = format!("####  {label}  ####\n\n{rendered_part}\n");
+                container_file_resolved_parts.push(part);
+            }
+        }
+        let mut all_parts = build_stage_parts;
+        all_parts.extend(container_file_resolved_parts);
+        outputs.push((containerfile_name, all_parts.join("\n")));
     }
     Ok(outputs)
 }
@@ -824,12 +921,17 @@ enum CapturingState {
 pub struct ModuleData {
     pub containerfile: String,
     pub config: String,
+    /// Install stage for independent modules. `None` for non-independent modules or when only one
+    /// containerfile/dockerfile block is present.
+    pub install_stage: Option<String>,
 }
 
 #[eros::context("Could not read '{}' as a module.", &PathBuf::from(&path).display())]
 pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
     let data = fs::read_to_string(path).await?;
-    let mut container_data = None;
+    // Collect containerfile/dockerfile blocks in the order they appear. Independent modules use
+    // two blocks: the first is the build stage, the second is the install stage.
+    let mut container_data: Vec<String> = Vec::new();
     let mut config_data = None;
     let mut capture_status = CapturingState::None;
     let mut capture = String::new();
@@ -845,9 +947,6 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             capture_status = CapturingState::Config;
             continue;
         } else if compare_line == "```containerfile" || compare_line == "```dockerfile" {
-            if container_data.is_some() {
-                continue;
-            }
             if capture_status != CapturingState::None {
                 eros::bail!(
                     "Found another Containerfile start line before finishing the previous one"
@@ -861,7 +960,7 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
                     // Could be another documentation block ignore
                 }
                 CapturingState::Containerfile => {
-                    container_data = Some(capture.clone());
+                    container_data.push(capture.clone());
                     capture.clear();
                     capture_status = CapturingState::None;
                 }
@@ -878,25 +977,44 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             capture.push('\n');
         }
     }
-    Ok(match (container_data, config_data) {
-        (None, None) => {
+    Ok(match (container_data.is_empty(), config_data) {
+        (true, None) => {
             // No sections found for either so interpret the entire file as a containerfile
             ModuleData {
                 containerfile: data,
                 config: String::new(),
+                install_stage: None,
             }
         }
-        (None, Some(_)) => {
+        (true, Some(_)) => {
             eros::bail!("Found config in the module file, but no containerfile data")
         }
-        (Some(container_data), None) => ModuleData {
-            containerfile: container_data,
-            config: String::new(),
-        },
-        (Some(container_data), Some(config_data)) => ModuleData {
-            containerfile: container_data,
-            config: config_data,
-        },
+        (false, None) => {
+            // No config block. If there are two containerfile blocks, treat the second as the
+            // install stage (independent module without explicit config).
+            let install_stage = if container_data.len() > 1 {
+                Some(container_data.remove(1))
+            } else {
+                None
+            };
+            ModuleData {
+                containerfile: container_data.remove(0),
+                config: String::new(),
+                install_stage,
+            }
+        }
+        (false, Some(config_data)) => {
+            let install_stage = if container_data.len() > 1 {
+                Some(container_data.remove(1))
+            } else {
+                None
+            };
+            ModuleData {
+                containerfile: container_data.remove(0),
+                config: config_data,
+                install_stage,
+            }
+        }
     })
 }
 

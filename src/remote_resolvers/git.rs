@@ -75,6 +75,7 @@ impl GitProvider for Git {
                 ModuleFileData {
                     containerfile_data: module_data.containerfile,
                     config_data: module_data.config,
+                    install_stage_data: module_data.install_stage,
                     source_info,
                 },
             );
