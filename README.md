@@ -210,14 +210,14 @@ RUN echo after
 A module consists of one file with one to two parts - a Containerfile section and an optional config section.
 
 ````markdown
-```dockerfile
-
-# Dockerfile Statements Here
-
-```
 ```yaml
 
 # Configuration here
+
+```
+```dockerfile
+
+# Dockerfile Statements Here
 
 ```
 ````
