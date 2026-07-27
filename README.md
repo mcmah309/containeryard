@@ -52,24 +52,6 @@ hooks:
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
-If you need the declared output filenames in order, `yard output-order` prints one output name per line. This is useful from scripts that want to process generated files in the same order as `yard.yaml`.
-
-### Cache Busting
-
-`yard build --with-cache-busting` transforms the generated Containerfile so that a cache busting argument is inserted between each module -
-
-```dockerfile
-ARG CACHE_BUST_<MODULE_NAME>=1
-```
-
-This lets you bust the build cache for specific modules using podman/docker's `--build-arg` flag, e.g.:
-
-```bash
-podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
-```
-
-Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
-
 ## Module Files
 
 Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 
@@ -248,6 +230,58 @@ dpkg -i "$deb_file"
 cargo install containeryard
 ```
 Consider adding `--profile dist` for a longer compile time but a more optimal build.
+
+## Extra
+
+## Hooks
+
+Hooks can be use in `yard.yaml` to run before or after `yard build`
+```yaml
+hooks:
+  build:
+    pre: yard update
+    post: ./post_yard_build.sh
+
+# ...
+```
+`yard update` is a good hook since it keeps versions up to date with any remotes.
+
+## Yard Output
+
+If you need the declared output filenames in order, `yard outputs` prints one output name per line. This is useful from scripts that want to process generated files in the same order as `yard.yaml`. e.g. in a `post_yard_build.sh` script:
+```sh
+#!/usr/bin/env bash
+set -oeu pipefail
+
+for item in $(yard outputs); do
+    if [[ -f "$item" ]]; then
+        # Strip '.Containerfile' from the end to use as the image tag
+        tag="${item%.Containerfile}"
+        
+        echo "Building $tag from $item..."
+        podman build -f "$item" -t "$tag"
+    else
+        echo "Error: File '$item' not found."
+        exit 1
+    fi
+done
+```
+
+### Cache Busting
+
+`yard build --with-cache-busting` transforms the generated Containerfile so that a cache busting argument is inserted between each module -
+
+```dockerfile
+ARG CACHE_BUST_<MODULE_NAME>=1
+```
+
+This lets you bust the build cache for specific modules using podman/docker's `--build-arg` flag, e.g.:
+
+```bash
+podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
+```
+
+Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
 
 ## FAQ
 ### Why Use ContainerYard?
