@@ -76,7 +76,7 @@ A module consists of one file with one to two parts - an optional [config sectio
 ---
 Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
 
-For [independent modules](#independent-modules), the file instead has an additional Containerfile section.
+For [independent modules](#independent-modules), the file has an additional Containerfile section.
 
 ### Module Parts
 
