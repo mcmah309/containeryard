@@ -7,7 +7,7 @@
 ContainerYard is a declarative, reproducible, and reusable decentralized approach for defining containers. 
 See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 
-ContainerYard breaks a containers definition into [modules](#module-files) and composes them with a [yard file](#yardyaml). 
+ContainerYard breaks a containers definition into [modules](#module-files) and composes them with a [yard file](#yard-file). 
 
 ## Yard File
 A yard file (`yard.yaml`) composes [modules](#module-files) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)). E.g.
