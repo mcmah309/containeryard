@@ -75,8 +75,29 @@ Module names come from the `yard.yaml` output declarations (e.g. `rust-essential
 Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 
 Modules can be easily reused, improved, and version controlled.
 
+### Module File Format
+A module consists of one file with one to two parts - an optional [config section](#configuration) and a Containerfile [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/))section.
+
+````markdown
+```yaml
+
+# Configuration here
+
+```
+```dockerfile
+
+# Dockerfile Statements Here
+
+```
+````
+
+---
+Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
+
+For [independent modules](#independent-modules), the file instead has an additional Containerfile section.
+
 ### Module Parts
-A module can have two parts, a Containerfile (aka [Dockerfile](https://docs.docker.com/reference/dockerfile/)) component and an optional configuration component.
+
 #### Containerfile
 Containerfile defines the core of the module. E.g.
 ```dockerfile
@@ -92,6 +113,7 @@ This file is first treated as a [Tera](https://keats.github.io/tera/docs/#templa
 The result is a pure Containerfile component that can be combined with other modules.
 
 #### Configuration
+
 The configuration component is a `yaml` block and provides metadata for what the Containerfile component needs. E.g.
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
@@ -124,6 +146,7 @@ outputs:
 ```
 
 ### Putting It All Together
+
 Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build` would be
 ```dockerfile
 FROM alpine:3.20.0
@@ -205,27 +228,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN echo after
 ```
-
-#### Module File Format
-A module consists of one file with one to two parts - an optional config section and a Containerfile section.
-
-````markdown
-```yaml
-
-# Configuration here
-
-```
-```dockerfile
-
-# Dockerfile Statements Here
-
-```
-````
-
----
-Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
-
-For [independent modules](#independent-modules), the file instead has two Containerfile sections (the build stage and the install stage) plus the optional config section.
 
 ## Installation
 
