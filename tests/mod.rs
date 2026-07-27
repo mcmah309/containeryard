@@ -93,15 +93,14 @@ fn independent_modules() {
     );
 
     // The trailing inline module is preserved after the install stage.
-    let echo_idx = output.find("RUN echo hello").expect("echo should be present");
+    let echo_idx = output
+        .find("RUN echo hello")
+        .expect("echo should be present");
     assert!(
         echo_idx > install_stage_idx,
         "trailing inline module should come after the install stage"
     );
-}
 
-#[test]
-fn independent_modules_cache_busting() {
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/independent_modules")
