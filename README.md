@@ -134,7 +134,7 @@ For more module examples click [here](https://github.com/mcmah309/yard_module_re
 
 ### Independent Modules
 
-Independent modules are modules that can be built in any order. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
+Certain builders like doecker's buildkit can parallelize builds for faster building and smaller images. Independent modules take advantage of this. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
 
 When modules are combined, the **build stages of all independent modules are hoisted to the start** of the generated Containerfile, and the **install stage is injected where the module is declared** in the `yard.yaml` outputs (like a normal module). This is useful for defining dependencies in isolated build stages (e.g. a virtual environment built in a `builder` stage) and copying the result into the final image.
 
@@ -149,7 +149,7 @@ independent: true
 ```
 ```dockerfile
 # Build & install dependencies
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim AS python-deps-builder
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -158,7 +158,7 @@ RUN pip install --no-cache-dir numpy pandas scipy
 ```
 ```dockerfile
 # Copy the entire virtual environment
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=python-deps-builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 ```
@@ -183,7 +183,7 @@ the generated `out.Containerfile` would be:
 
 ```dockerfile
 # Build & install dependencies
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim AS python-deps-builder
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -195,7 +195,7 @@ FROM python:3.11-slim
 RUN echo before
 
 # Copy the entire virtual environment
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=python-deps-builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -219,30 +219,9 @@ A module consists of one file with one to two parts - a Containerfile section an
 ````
 
 ---
-Click [here](https://raw.githubusercontent.com/mcmah309/yard_module_repository/refs/heads/master/dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md) for an example. Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
+Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
 
-For [independent modules](#independent-modules), the file instead has two Containerfile sections (the build stage and the install stage) plus the optional config section:
-
----
-\`\`\`yaml
-
-\# Configuration here (with `independent: true`)
-
-\`\`\`
-
-\`\`\`dockerfile
-
-\# Build stage (Dockerfile Statements Here)
-
-\`\`\`
-
-\`\`\`dockerfile
-
-\# Install stage (Dockerfile Statements Here)
-
-\`\`\`
-
----
+For [independent modules](#independent-modules), the file instead has two Containerfile sections (the build stage and the install stage) plus the optional config section.
 
 ## Installation
 
@@ -251,7 +230,7 @@ Note: `yard` is the cli tool for ContainerYard.
 ### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
 
 ```bash
-release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.2.7'
+release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.3.12'
 deb_file="containeryard_$(echo $release_ver | sed 's/^v//')-1_amd64.deb"
 curl -LO https://github.com/mcmah309/containeryard/releases/download/$release_ver/$deb_file
 dpkg -i "$deb_file"
