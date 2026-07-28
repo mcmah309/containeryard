@@ -10,7 +10,7 @@ See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 ContainerYard breaks a containers definition into [modules](#module-files) and composes them with a [yard file](#yard-file). 
 
 ## Yard File
-A yard file (`yard.yaml`) composes [modules](#module-files) and outputs one or more Containerfiles (aka [Dockerfiles](https://docs.docker.com/reference/dockerfile/)). E.g.
+A yard file (`yard.yaml`) composes [modules](#module-files) and outputs one or more [Containerfiles (aka Dockerfiles)](https://docs.docker.com/reference/dockerfile/). E.g.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
@@ -58,7 +58,7 @@ Modules represent specific features of a container. e.g. The [rust module](https
 Modules can be easily reused, improved, and version controlled.
 
 ### Module File Format
-A module consists of one file with one to two parts - an optional [config section](#configuration) and a Containerfile [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) section.
+A module consists of one file with one to two parts - an optional [config section](#configuration) and a [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) section.
 
 ````markdown
 ```yaml
