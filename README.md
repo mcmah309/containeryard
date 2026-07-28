@@ -58,7 +58,7 @@ Modules represent specific features of a container. e.g. The [rust module](https
 Modules can be easily reused, improved, and version controlled.
 
 ### Module File Format
-A module consists of one file with one to two parts - an optional [config section](#configuration) and a Containerfile [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/))section.
+A module consists of one file with one to two parts - an optional [config section](#configuration) and a Containerfile [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/)section.
 
 ````markdown
 ```yaml
