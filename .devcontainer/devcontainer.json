@@ -1,7 +1,10 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 {
-	"name": "rust",
+	"name": "ContainerYard Dev Container",
 	"image": "rust",
+	// "build": {
+	// 	"dockerfile": "Containerfile"
+	// },
 	"customizations": {
 		"vscode": {
 			"settings": {
