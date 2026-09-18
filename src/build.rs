@@ -8,7 +8,7 @@ use std::{
 use eros::{Context, bail};
 use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tera::Tera;
 use tokio::fs;
 use tracing::trace;
@@ -121,7 +121,16 @@ pub enum YamlModuleType {
     Inline(String),
     /// Module ref `- module_name:`
     /// Module ref with template values `- module_name: ...`
-    InputRef(IndexMap<String, Option<HashMap<String, String>>>),
+    InputRef(IndexMap<String, Option<HashMap<String, TemplateValue>>>),
+}
+
+/// Argument values retain their type when inserted into template contexts.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum TemplateValue {
+    String(String),
+    Boolean(bool),
+    Number(serde_json::Number),
 }
 
 // Intermediate  yard.yaml reprsentation
@@ -161,7 +170,7 @@ struct UseInlineModule {
 #[derive(Debug, Clone, Default)]
 struct UseInputModule {
     name: String,
-    template_vars: HashMap<String, String>,
+    template_vars: HashMap<String, TemplateValue>,
 }
 
 //************************************************************************//
@@ -177,7 +186,7 @@ struct ModuleBuilder {
     required_files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
-    provided_template_values: HashMap<String, String>,
+    provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
     /// Module name for cache-busting aliases (None if not applicable)
@@ -242,7 +251,7 @@ struct Module {
     install_stage_template: Option<String>,
     /// Whether this module is an independent module.
     independent: bool,
-    provided_template_values: HashMap<String, String>,
+    provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
     /// Module name used for cache-busting aliases (None if not applicable)
@@ -529,7 +538,13 @@ async fn resolve_yard_yaml(
                     let mut module = module.clone();
                     module.name = Some(declared_module.name.clone());
                     for (var, val) in declared_module.template_vars {
-                        let val = resolve_template_value(val)?;
+                        let val = match val {
+                            TemplateValue::String(value) => {
+                                TemplateValue::String(resolve_template_value(value)?)
+                            }
+                            TemplateValue::Boolean(value) => TemplateValue::Boolean(value),
+                            TemplateValue::Number(value) => TemplateValue::Number(value),
+                        };
                         module.provided_template_values.insert(var, val);
                     }
                     modules_for_container_file.push(module.build()?);
@@ -820,7 +835,7 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
     fn render(
         tera: &Tera,
         template: &str,
-        provided_template_values: &HashMap<String, String>,
+        provided_template_values: &HashMap<String, TemplateValue>,
         source_info: &SourceInfoKind,
     ) -> eros::Result<String> {
         let mut context = tera::Context::new();

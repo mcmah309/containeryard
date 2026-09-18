@@ -1,0 +1,12 @@
+inputs:
+  modules:
+    flags: module.md
+outputs:
+  Containerfile:
+    - flags:
+        enabled: true
+        disabled: false
+        message: unchanged
+        count: 3
+        negative: -2
+        fraction: 1.5

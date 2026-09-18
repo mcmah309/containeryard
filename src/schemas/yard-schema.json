@@ -77,7 +77,7 @@
                       }
                     },
                     "additionalProperties": {
-                      "type": "string"
+                      "type": ["string", "boolean", "number"]
                     }
                   },
                   {

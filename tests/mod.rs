@@ -134,3 +134,20 @@ fn duplicate_module_rejected() {
         }
     }
 }
+
+#[test]
+fn boolean_and_number_args() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/boolean_args")
+        .arg("build")
+        .assert()
+        .success();
+
+    let output = std::fs::read_to_string("tests/boolean_args/Containerfile").unwrap();
+    assert!(output.contains("RUN echo true false unchanged"));
+    assert!(output.contains("RUN echo 4 -2 2"));
+    assert!(output.contains("RUN echo enabled"));
+    assert!(output.contains("RUN echo disabled"));
+    assert!(!output.contains("unexpected"));
+}
