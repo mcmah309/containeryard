@@ -314,7 +314,9 @@ Open the project in vscode, click the "open in container" button and you are rea
 
 ## Module Repositories
 
-- <https://github.com/mcmah309/yard_module_repository.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
+Repositories of module files. Good resource to see more examples and working configs for other users.
 
-**\*Feel free to create a PR to add your own!\***
+- <https://github.com/mcmah309/containeryard_modules.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
+
+**\*Feel free to create a PR to add your own\***
 
