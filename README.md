@@ -101,11 +101,15 @@ The configuration component is a `yaml` block and provides metadata for what the
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
 description: "This is a modules description"
-# Files to be pulled in with this module
+# Template arguments accepted by this module
 args:
   required:
   optional:
     - version
+# Modules that must appear earlier in every output using this module.
+# Paths are relative to this module file.
+requires:
+  - ../base/alpine.md
 # Files to be pulled in with this module
 required_files:
   - file/path
@@ -113,6 +117,8 @@ required_files:
 independent: true
 ```
 All of the above settings are optional
+
+`requires` lists module files that must be included earlier in every output that uses the declaring module. Paths are resolved relative to the module file, and modules are matched by their source path rather than their `yard.yaml` input alias. For remote modules, the required module must come from the same repository and commit.
 
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.
@@ -319,4 +325,3 @@ Repositories of module files. Good resource to see more examples and working con
 - <https://github.com/mcmah309/containeryard_modules.git> - mcmah309's Module Repository. Rust, Flutter, Bash, etc.
 
 **\*Feel free to create a PR to add your own\***
-

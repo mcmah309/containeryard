@@ -68,6 +68,9 @@ pub struct YamlModule {
     /// the module is declared. Defaults to false.
     #[serde(default)]
     pub independent: bool,
+    /// Module files that must be included earlier in each output that uses this module. Paths are
+    /// relative to this module file.
+    pub requires: Option<Vec<String>>,
     /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
     pub required_files: Option<Vec<String>>,
 }
@@ -183,6 +186,7 @@ struct ModuleBuilder {
     install_stage_data: Option<String>,
     /// Whether this module is an independent module.
     independent: bool,
+    required_modules: Vec<ModuleRequirement>,
     required_files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
@@ -191,6 +195,24 @@ struct ModuleBuilder {
     source_info: SourceInfoKind,
     /// Module name for cache-busting aliases (None if not applicable)
     name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ModuleOrigin {
+    Local,
+    Remote { url: String, commit: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ModuleIdentity {
+    origin: ModuleOrigin,
+    path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct ModuleRequirement {
+    declared_path: String,
+    resolved: ModuleIdentity,
 }
 
 impl ModuleBuilder {
@@ -321,6 +343,24 @@ impl SourceInfoKind {
             SourceInfoKind::Remote(info) => format!("{}: {}", &info.name, &info.path),
             SourceInfoKind::Inline(_) => "~INLINE~".to_owned(),
         }
+    }
+
+    fn module_identity(&self) -> eros::Result<Option<ModuleIdentity>> {
+        let (origin, path) = match self {
+            SourceInfoKind::Local(info) => (ModuleOrigin::Local, info.path.as_str()),
+            SourceInfoKind::Remote(info) => (
+                ModuleOrigin::Remote {
+                    url: info.url.clone(),
+                    commit: info.commit.clone(),
+                },
+                info.path.as_str(),
+            ),
+            SourceInfoKind::Inline(_) => return Ok(None),
+        };
+        Ok(Some(ModuleIdentity {
+            origin,
+            path: normalize_module_path(Path::new(path))?,
+        }))
     }
 }
 
@@ -497,6 +537,7 @@ async fn resolve_yard_yaml(
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
         let mut seen_module_names: HashSet<String> = HashSet::new();
+        let mut seen_module_paths: HashSet<ModuleIdentity> = HashSet::new();
         let mut inline_counter = 0u32;
         for module_declaration in module_declarations {
             match module_declaration {
@@ -508,6 +549,7 @@ async fn resolve_yard_yaml(
                             containerfile_data: inline.value.clone(),
                             install_stage_data: None,
                             independent: false,
+                            required_modules: Vec::new(),
                             required_files: Vec::new(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
@@ -535,6 +577,18 @@ async fn resolve_yard_yaml(
                             YARD_YAML_FILE_NAME
                         )
                     })?;
+                    for requirement in &module.required_modules {
+                        if !seen_module_paths.contains(&requirement.resolved) {
+                            bail!(
+                                "Module '{}' requires module '{}' (resolved to '{}') to be included before it in output '{}'.\n{}",
+                                declared_module.name,
+                                requirement.declared_path,
+                                requirement.resolved.path.display(),
+                                container_file_name,
+                                module.source_info.source_location()
+                            );
+                        }
+                    }
                     let mut module = module.clone();
                     module.name = Some(declared_module.name.clone());
                     for (var, val) in declared_module.template_vars {
@@ -547,7 +601,12 @@ async fn resolve_yard_yaml(
                         };
                         module.provided_template_values.insert(var, val);
                     }
+                    let module_identity = module
+                        .source_info
+                        .module_identity()?
+                        .expect("Input modules always have a module identity");
                     modules_for_container_file.push(module.build()?);
+                    seen_module_paths.insert(module_identity);
                 }
             }
         }
@@ -653,6 +712,64 @@ fn is_local_absolute(path: &Path) -> eros::Result<()> {
     Ok(())
 }
 
+/// Normalize a module path without touching the filesystem. Module paths are rooted at either the
+/// yard directory or a remote repository, so they may not escape that root.
+fn normalize_module_path(path: &Path) -> eros::Result<PathBuf> {
+    let error = || {
+        eros::error!(
+            "Module path '{}' is not valid. Module paths must be relative and stay within their source root.",
+            path.display()
+        )
+    };
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => return Err(error()),
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(error());
+                }
+            }
+            Component::CurDir => {}
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(error());
+    }
+    Ok(normalized)
+}
+
+fn resolve_module_requirement(
+    source_info: &SourceInfoKind,
+    required_path: String,
+) -> eros::Result<ModuleRequirement> {
+    let source = source_info
+        .module_identity()?
+        .expect("Only file-backed modules can declare requirements");
+    let requirement_path = Path::new(&required_path);
+    if requirement_path.is_absolute() {
+        bail!(
+            "Required module path '{}' is not valid. Required module paths must be relative to the module file.",
+            required_path
+        );
+    }
+    let resolved_path = normalize_module_path(
+        &source
+            .path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(requirement_path),
+    )?;
+    Ok(ModuleRequirement {
+        declared_path: required_path,
+        resolved: ModuleIdentity {
+            origin: source.origin,
+            path: resolved_path,
+        },
+    })
+}
+
 #[eros::context("Could not resolve modules from the ")]
 async fn validate_schema_and_create_module_builders(
     name_to_module_files_data: HashMap<String, ModuleFileData>,
@@ -699,62 +816,80 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
     module_files: ModuleFileData,
     validate_module_schema_fn: F,
 ) -> eros::Result<ModuleBuilder> {
-    let (required_files, required_template_values, optional_template_values, independent) =
-        (|| -> eros::Result<_> {
-            // If there is no config block, default to a non-independent module.
-            let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty()
-            {
-                serde_yaml::Value::Null
-            } else {
-                serde_yaml::from_str(&module_files.config_data)
-                    .with_context(|| "yard-module-schema.json is not valid json.")?
-            };
+    let (
+        required_modules,
+        required_files,
+        required_template_values,
+        optional_template_values,
+        independent,
+    ) = (|| -> eros::Result<_> {
+        // If there is no config block, default to a non-independent module.
+        let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty() {
+            serde_yaml::Value::Null
+        } else {
+            serde_yaml::from_str(&module_files.config_data)
+                .with_context(|| "yard-module-schema.json is not valid json.")?
+        };
 
-            validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
+        validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
 
-            let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
-                "Was able to serialize yaml, but was unable to convert to internal expected model.",
-            )?;
-            fn tera_accepts_ident(name: &str) -> bool {
-                let template = format!("{{{{ {} }}}}", name);
-                let mut context = tera::Context::new();
-                context.insert(name.to_owned(), "");
-                tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e.is_empty())
+        let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
+            "Was able to serialize yaml, but was unable to convert to internal expected model.",
+        )?;
+        fn tera_accepts_ident(name: &str) -> bool {
+            let template = format!("{{{{ {} }}}}", name);
+            let mut context = tera::Context::new();
+            context.insert(name.to_owned(), "");
+            tera::Tera::one_off(&template, &context, false).is_ok_and(|e| e.is_empty())
+        }
+        let YamlModule {
+            args,
+            independent,
+            requires,
+            required_files,
+            ..
+        } = raw_module;
+        let args = args.unwrap_or_default();
+        let required_files = required_files.unwrap_or_default();
+        let required_modules = requires
+            .unwrap_or_default()
+            .into_iter()
+            .map(|path| resolve_module_requirement(&module_files.source_info, path))
+            .collect::<eros::Result<Vec<_>>>()?;
+        let required_template_values: HashSet<String> =
+            args.required.unwrap_or_default().into_iter().collect();
+        let optional_template_values: HashSet<String> =
+            args.optional.unwrap_or_default().into_iter().collect();
+        for template_value in required_template_values
+            .iter()
+            .chain(optional_template_values.iter())
+        {
+            if !tera_accepts_ident(template_value) {
+                bail!(
+                    "Template variable '{}' is not a valid identifier for a module argument.",
+                    template_value
+                );
             }
-            let args = raw_module.args.unwrap_or_default();
-            let required_files = raw_module.required_files.unwrap_or_default();
-            let required_template_values: HashSet<String> =
-                args.required.unwrap_or_default().into_iter().collect();
-            let optional_template_values: HashSet<String> =
-                args.optional.unwrap_or_default().into_iter().collect();
-            for template_value in required_template_values
-                .iter()
-                .chain(optional_template_values.iter())
-            {
-                if !tera_accepts_ident(template_value) {
-                    bail!(
-                        "Template variable '{}' is not a valid identifier for a module argument.",
-                        template_value
-                    );
-                }
-            }
+        }
 
-            for required_file in required_files.iter() {
-                is_local_absolute(&PathBuf::from(required_file))?;
-            }
-            Ok((
-                required_files,
-                required_template_values,
-                optional_template_values,
-                raw_module.independent,
-            ))
-        })()
-        .with_context(|| module_files.source_info.source_location())?;
+        for required_file in required_files.iter() {
+            is_local_absolute(&PathBuf::from(required_file))?;
+        }
+        Ok((
+            required_modules,
+            required_files,
+            required_template_values,
+            optional_template_values,
+            independent,
+        ))
+    })()
+    .with_context(|| module_files.source_info.source_location())?;
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
         install_stage_data: module_files.install_stage_data,
         independent,
+        required_modules,
         required_files,
         required_template_values,
         optional_template_values,

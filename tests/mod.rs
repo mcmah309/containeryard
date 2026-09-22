@@ -1,6 +1,6 @@
 use std::fs;
 
-use predicates::prelude::predicate;
+use predicates::prelude::{PredicateBooleanExt, predicate};
 
 #[test]
 fn conflicting_required_files() {
@@ -133,6 +133,51 @@ fn duplicate_module_rejected() {
             );
         }
     }
+}
+
+#[test]
+fn module_requires_accepts_dependency_in_an_earlier_position() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_success")
+        .arg("build")
+        .assert()
+        .success();
+
+    let output = fs::read_to_string("tests/module_requires_success/Containerfile").unwrap();
+    let base_idx = output.find("RUN echo base").unwrap();
+    let consumer_idx = output.find("RUN echo consumer").unwrap();
+    assert!(base_idx < consumer_idx);
+}
+
+#[test]
+fn module_requires_rejects_dependency_in_a_later_position() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_wrong_order")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("requires module '../base.md'").and(predicate::str::contains(
+                "included before it in output 'Containerfile'",
+            )),
+        );
+}
+
+#[test]
+fn module_requires_rejects_dependency_missing_from_output() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_missing")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("requires module '../base.md'").and(predicate::str::contains(
+                "included before it in output 'Containerfile'",
+            )),
+        );
 }
 
 #[test]

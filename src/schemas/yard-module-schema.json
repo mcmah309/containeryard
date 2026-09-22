@@ -47,6 +47,14 @@
             }
           ]
         },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Module paths that must be included earlier in any output using this module. Each path is resolved relative to this module file."
+        },
         "required_files": {
           "type": "array",
           "items": {
