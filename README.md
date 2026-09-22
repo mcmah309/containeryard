@@ -280,6 +280,14 @@ cargo install containeryard
 ```
 Consider adding `--profile dist` for a longer compile time but a more optimal build.
 
+### Nix
+
+ContainerYard is available in [nixpkgs unstable](https://search.nixos.org/packages?channel=unstable&query=containeryard#show=containeryard).
+
+```bash
+nix profile install nixpkgs/nixos-unstable#containeryard
+```
+
 ## Extra
 
 ### Yard Output
@@ -339,14 +347,6 @@ ContainerYard is heavily inspired by Nix flakes. In fact, ContainerYard can be t
 Nix flakes guarantees reproducibility at the cost of developer flexibility. ContainerYard is decentralized, allowing users to easily use different package managers and upstreams. As such, ContainerYard sacrifices some reproducibility guarantees and gains complete developer flexibility.
 
 ContainerYard is also extremely simple and built on familiar developer tools - Containerfiles and Tera templates.
-
-## Contributing
-
-Feel free to open an issue with any suggestions/ideas/bugs you may have and/or create PR's.
-
-ContainerYard builds and uses its own dev container :D see [here](https://github.com/mcmah309/containeryard/tree/master/.devcontainer).
-Open the project in vscode, click the "open in container" button and you are ready to go! Otherwise just use the provided Containerfile or your own local setup.
-
 
 ## Module Repositories
 
