@@ -41,7 +41,15 @@ async fn main() {
                 path,
                 do_not_refetch,
                 with_cache_busting,
-            } => build(&path, do_not_refetch, with_cache_busting)
+                ignore_requires,
+                ignore_all_requires,
+            } => build(
+                &path,
+                do_not_refetch,
+                with_cache_busting,
+                ignore_requires,
+                ignore_all_requires,
+            )
                 .await
                 .with_context(|| format!("Run `yard build` in '{}'", path.display()))
                 .user_context(

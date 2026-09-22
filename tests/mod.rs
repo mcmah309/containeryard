@@ -264,6 +264,51 @@ fn module_requires_rejects_dependency_missing_from_output() {
 }
 
 #[test]
+fn module_requires_can_be_ignored_for_named_modules() {
+    let output_file = TestOutputFile::new("tests/module_requires_ignored_named");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_ignored_named")
+        .args(["build", "--ignore-requires", "consumer,foundation"])
+        .assert()
+        .success();
+
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    let consumer_idx = output.find("RUN echo consumer").unwrap();
+    let base_idx = output.find("RUN echo base").unwrap();
+    assert!(consumer_idx < base_idx);
+}
+
+#[test]
+fn module_requires_named_ignore_is_selective() {
+    let _output = TestOutputFile::new("tests/module_requires_wrong_order");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_wrong_order")
+        .args(["build", "--ignore-requires", "foundation"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Module 'consumer' requires module '../base.md'",
+        ));
+}
+
+#[test]
+fn module_requires_can_be_ignored_for_all_modules() {
+    let output_file = TestOutputFile::new("tests/module_requires_ignored_all");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/module_requires_ignored_all")
+        .args(["build", "--ignore-all-requires"])
+        .assert()
+        .success();
+
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    assert!(output.contains("RUN echo consumer"));
+    assert!(!output.contains("RUN echo base"));
+}
+
+#[test]
 fn boolean_and_number_args() {
     let output_file = TestOutputFile::new("tests/boolean_args");
     assert_cmd::Command::cargo_bin("yard")

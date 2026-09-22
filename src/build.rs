@@ -24,9 +24,19 @@ pub async fn build(
     path: &Path,
     do_not_refetch: bool,
     with_cache_busting: bool,
+    ignore_requires: Vec<String>,
+    ignore_all_requires: bool,
 ) -> eros::Result<()> {
     let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path).await?;
-    let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch).await?;
+    let ignore_requires = ignore_requires.into_iter().collect();
+    let resolved_yard_file = resolve_yard_yaml(
+        parsed_yard_file,
+        path,
+        do_not_refetch,
+        &ignore_requires,
+        ignore_all_requires,
+    )
+    .await?;
     if resolved_yard_file.name_to_module.is_empty() {
         return Err(user_error(
             "No modules were resolved. Add at least one module to an output in yard.yaml.",
@@ -527,6 +537,8 @@ async fn resolve_yard_yaml(
     yard_yaml: YardFile,
     path: &Path,
     do_not_refetch: bool,
+    ignore_requires: &HashSet<String>,
+    ignore_all_requires: bool,
 ) -> eros::Result<Containerfiles> {
     let YardFile {
         input_remotes,
@@ -620,19 +632,21 @@ async fn resolve_yard_yaml(
                             declared_module.name, YARD_YAML_FILE_NAME
                         ))
                     })?;
-                    for requirement in &module.required_modules {
-                        if !seen_module_paths.contains(&requirement.resolved) {
-                            return Err(user_error(format!(
-                                "Module '{}' requires module '{}' to be included before it in output '{}'.",
-                                declared_module.name,
-                                requirement.declared_path,
-                                container_file_name
-                            ))
-                            .context(format!(
-                                "Required module resolved to '{}' for {}",
-                                requirement.resolved.path.display(),
-                                module.source_info.source_location()
-                            )));
+                    if !ignore_all_requires && !ignore_requires.contains(&declared_module.name) {
+                        for requirement in &module.required_modules {
+                            if !seen_module_paths.contains(&requirement.resolved) {
+                                return Err(user_error(format!(
+                                    "Module '{}' requires module '{}' to be included before it in output '{}'.",
+                                    declared_module.name,
+                                    requirement.declared_path,
+                                    container_file_name
+                                ))
+                                .context(format!(
+                                    "Required module resolved to '{}' for {}",
+                                    requirement.resolved.path.display(),
+                                    module.source_info.source_location()
+                                )));
+                            }
                         }
                     }
                     let mut module = module.clone();

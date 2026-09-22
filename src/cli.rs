@@ -24,6 +24,12 @@ pub enum Commands {
         /// If set, cache busting `ARG` statements are injected before each module. This allows busting build cache for specific modules.
         #[clap(long, default_value = "false")]
         with_cache_busting: bool,
+        /// Skip `requires` checks for these module names. May be repeated or supplied as a comma-separated list.
+        #[clap(long, value_delimiter = ',')]
+        ignore_requires: Vec<String>,
+        /// Skip `requires` checks for every module.
+        #[clap(long, default_value = "false")]
+        ignore_all_requires: bool,
     },
     /// Print output filenames in the order they are declared in `yard.yaml`.
     Outputs {
