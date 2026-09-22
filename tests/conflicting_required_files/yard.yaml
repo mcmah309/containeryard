@@ -6,6 +6,6 @@ inputs:
     two: two/two.md
 
 outputs:
-  Containerfile:
+  output.test.Containerfile:
     - one:
     - two:

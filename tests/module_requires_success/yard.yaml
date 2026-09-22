@@ -4,6 +4,6 @@ inputs:
     consumer: modules/nested/consumer.md
 
 outputs:
-  Containerfile:
+  output.test.Containerfile:
     - foundation:
     - consumer:

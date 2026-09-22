@@ -29,7 +29,7 @@ fn pure_containerfile() {
         .arg("build")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/pure_containerfile/Containerfile").unwrap();
+    let output = fs::read_to_string("tests/pure_containerfile/output.test.Containerfile").unwrap();
     assert!(output.contains("# Empty"));
 }
 
@@ -41,7 +41,8 @@ fn module_file_no_config() {
         .arg("build")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/module_file_no_config/Containerfile").unwrap();
+    let output =
+        fs::read_to_string("tests/module_file_no_config/output.test.Containerfile").unwrap();
     assert!(output.contains("# Empty"));
 }
 
@@ -53,7 +54,7 @@ fn output_order() {
         .arg("outputs")
         .assert();
     assert.success().stdout(predicate::eq(
-        "base.Containerfile\napp.Containerfile\nfinal.Containerfile\n",
+        "base.test.Containerfile\napp.test.Containerfile\nfinal.test.Containerfile\n",
     ));
 }
 
@@ -65,7 +66,7 @@ fn independent_modules() {
         .arg("build")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/independent_modules/out.Containerfile").unwrap();
+    let output = fs::read_to_string("tests/independent_modules/output.test.Containerfile").unwrap();
 
     // The build stage must be hoisted to the start of the generated Containerfile.
     let build_stage_idx = output
@@ -108,7 +109,7 @@ fn independent_modules() {
         .arg("--with-cache-busting")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/independent_modules/out.Containerfile").unwrap();
+    let output = fs::read_to_string("tests/independent_modules/output.test.Containerfile").unwrap();
     // Cache busting ARGs are injected before both the build and install stages.
     assert!(output.contains("ARG CACHE_BUST_PYTHON_DEPS=1"));
 }
@@ -144,7 +145,8 @@ fn module_requires_accepts_dependency_in_an_earlier_position() {
         .assert()
         .success();
 
-    let output = fs::read_to_string("tests/module_requires_success/Containerfile").unwrap();
+    let output =
+        fs::read_to_string("tests/module_requires_success/output.test.Containerfile").unwrap();
     let base_idx = output.find("RUN echo base").unwrap();
     let consumer_idx = output.find("RUN echo consumer").unwrap();
     assert!(base_idx < consumer_idx);
@@ -160,7 +162,7 @@ fn module_requires_rejects_dependency_in_a_later_position() {
         .failure()
         .stderr(
             predicate::str::contains("requires module '../base.md'").and(predicate::str::contains(
-                "included before it in output 'Containerfile'",
+                "included before it in output 'output.test.Containerfile'",
             )),
         );
 }
@@ -175,7 +177,7 @@ fn module_requires_rejects_dependency_missing_from_output() {
         .failure()
         .stderr(
             predicate::str::contains("requires module '../base.md'").and(predicate::str::contains(
-                "included before it in output 'Containerfile'",
+                "included before it in output 'output.test.Containerfile'",
             )),
         );
 }
@@ -189,7 +191,7 @@ fn boolean_and_number_args() {
         .assert()
         .success();
 
-    let output = std::fs::read_to_string("tests/boolean_args/Containerfile").unwrap();
+    let output = std::fs::read_to_string("tests/boolean_args/output.test.Containerfile").unwrap();
     assert!(output.contains("RUN echo true false unchanged"));
     assert!(output.contains("RUN echo 4 -2 2"));
     assert!(output.contains("RUN echo enabled"));

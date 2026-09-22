@@ -5,5 +5,5 @@ inputs:
     one: module.md
 
 outputs:
-  Containerfile:
+  output.test.Containerfile:
     - one:

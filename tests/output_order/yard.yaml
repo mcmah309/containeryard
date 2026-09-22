@@ -5,9 +5,9 @@ inputs:
     one: module.Containerfile
 
 outputs:
-  base.Containerfile:
+  base.test.Containerfile:
     - one:
-  app.Containerfile:
+  app.test.Containerfile:
     - one:
-  final.Containerfile:
+  final.test.Containerfile:
     - one:

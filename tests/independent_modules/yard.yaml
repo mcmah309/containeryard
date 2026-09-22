@@ -5,7 +5,7 @@ inputs:
     python_deps: python_deps.md
 
 outputs:
-  out.Containerfile:
+  output.test.Containerfile:
     - FROM python:3.11-slim
     - python_deps:
     - RUN echo hello

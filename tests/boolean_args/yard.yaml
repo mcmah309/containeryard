@@ -2,7 +2,7 @@ inputs:
   modules:
     flags: module.md
 outputs:
-  Containerfile:
+  output.test.Containerfile:
     - flags:
         enabled: true
         disabled: false
