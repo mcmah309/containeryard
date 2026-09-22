@@ -10,67 +10,83 @@ See [Why Use ContainerYard](#why-use-containeryard) for motivation.
 ContainerYard breaks a containers definition into [modules](#module-files) and composes them with a [yard file](#yard-file). 
 
 ## Yard File
-A yard file (`yard.yaml`) composes [modules](#module-files) and outputs one or more [Containerfiles (aka Dockerfiles)](https://docs.docker.com/reference/dockerfile/). E.g.
+
+A yard file (`yard.yaml`) names the modules available to a project and composes them into one or more [Containerfiles](https://docs.docker.com/reference/dockerfile/). It has two required sections—`inputs` and `outputs`—plus optional build `hooks`.
+
+### 1. Declare Inputs
+
+Inputs give modules short names for use in outputs. Modules can come from local files or from a Git repository pinned to a commit:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
 inputs:
-  # Modules found on local paths
   modules:
     finalizer: local_modules/finalizer.md
-  # Modules found in a remote repos
+
   remotes:
     - url: https://github.com/mcmah309/yard_module_repository
       commit: 59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420
       modules:
         base: bases/ubuntu/lts.md
         git_config: dependent/git/git_config.md
-        bash_flavor: apt/bash_interactive/flavors/mcmah309/mcmah309.md
-
-outputs:
-  # Output Containerfile created from modules
-  Containerfile:
-    # Module "base" from inputs
-    - base:
-         # Inputs, shell commands `$(..)` and ENV vars `$..` also supported
-        version: "24.04"
-    # Inline module
-    - RUN apt install git
-    - git_config:
-        user_name: $(git config --get user.name)
-        email: $(git config --get user.email)
-    - bash_flavor:
-    - finalizer:
-
-hooks:
-  build:
-    # Command executed before the build. Will reload this file after the command is executed
-    pre: yard update
-    post: podman build . -t git
+        bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md
 ```
-Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
-See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
-### Reusing Outputs
+The keys such as `base` and `git_config` are project-local names; the paths identify the module files at their source.
 
-An output can include another output by referencing its exact name with the same syntax used for an input module. ContainerYard expands the referenced output's module declarations at that position before validating modules or rendering either Containerfile:
+### 2. Compose Outputs
+
+Each key under `outputs` is a file that `yard build` creates. Its entries are applied in order and may be named modules or inline Containerfile instructions:
 
 ```yaml
 outputs:
-  rust.Containerfile:
-    - ubuntu:
+  base.Containerfile:
+    - base:
         version: "24.04"
-    - rustup:
-    - rust-essentials:
-
-  rust-c.Containerfile:
-    - rust.Containerfile:
-    - clang:
-    - sccache:
+    - RUN apt install --yes git
+    - git_config:
+        user_name: $(git config --get user.name)
+        email: $GIT_EMAIL
 ```
 
-In this example, `rust-c.Containerfile` contains the modules from `rust.Containerfile` followed by `clang` and `sccache`. Because expansion happens before `requires` validation, requirements can be satisfied by modules in the referenced output.
+Module arguments are nested beneath the module name. String arguments can use `$(command)` output or `$ENVIRONMENT_VARIABLE` values. A scalar such as `RUN apt install --yes git` is copied into the generated Containerfile as an inline instruction.
+
+### 3. Reuse Outputs
+
+An output can include another output by naming it with the same colon syntax used for a module:
+
+```yaml
+outputs:
+  base.Containerfile:
+    - base:
+        version: "24.04"
+    - git_config:
+        user_name: $(git config --get user.name)
+        email: $GIT_EMAIL
+
+  development.Containerfile:
+    - base.Containerfile:
+    - bash_flavor:
+    - finalizer:
+```
+
+ContainerYard expands `base.Containerfile` at that position before module validation and rendering. The generated `development.Containerfile` therefore contains `base`, `git_config`, `bash_flavor`, and `finalizer`; a module's `requires` can be satisfied by modules from the referenced output. This composes declarations—it does not add a `FROM` instruction—and both outputs are still generated.
+
+### 4. Add Build Hooks (Optional)
+
+Build hooks run commands around `yard build`:
+
+```yaml
+hooks:
+  build:
+    pre: yard update
+    post: podman build -f development.Containerfile . -t my-image
+```
+
+The `pre` hook runs before module resolution, after which ContainerYard reloads `yard.yaml`. The `post` hook runs after all output files are written. Using `yard update` as the pre-hook keeps remote commits current.
+
+Run `yard build` to generate every declared output. More complete examples are available in the [`examples` directory](https://github.com/mcmah309/containeryard/tree/master/examples).
 
 ## Module Files
 
@@ -258,19 +274,6 @@ cargo install containeryard
 Consider adding `--profile dist` for a longer compile time but a more optimal build.
 
 ## Extra
-
-### Hooks
-
-Hooks can be use in `yard.yaml` to run before or after `yard build`
-```yaml
-hooks:
-  build:
-    pre: yard update
-    post: ./post_yard_build.sh
-
-# ...
-```
-`yard update` is a good hook since it keeps versions up to date with any remotes.
 
 ### Yard Output
 
