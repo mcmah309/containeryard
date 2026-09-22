@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-schema.json
 
-hooks:
-  build:
-    # pre: yard update
-    post: podman build . -t python-with-cuda
+# hooks:
+#   build:
+#     pre: yard update
+#     post: podman build . -t python-with-cuda
 
 inputs:
   modules:

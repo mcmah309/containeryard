@@ -1,5 +1,5 @@
-`Containerfile.22_04` and `Containerfile.24_04` were created by running
+Generate `Containerfile.22_04` and `Containerfile.24_04` and download the required `setup_bash.sh` file with:
+
 ```bash
 yard build .
 ```
-Which also pulled int the `setup_bash.sh` file.

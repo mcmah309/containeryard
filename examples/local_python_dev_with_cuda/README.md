@@ -1,5 +1,11 @@
-`Containerfile` was created by running
+Generate `Containerfile` and download the required `setup_bash.sh` file with:
+
 ```bash
 yard build .
 ```
-Which also pulled int the `setup_bash.sh` file.
+
+To build the image automatically, uncomment the Podman post-hook in `yard.yaml`, or run:
+
+```bash
+podman build . -t python-with-cuda
+```
