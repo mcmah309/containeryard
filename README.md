@@ -94,7 +94,7 @@ Modules represent specific features of a container. e.g. The [rust module](https
 Modules can be easily reused, improved, and version controlled.
 
 ### Module File Format
-A module consists of one file with one to two parts - an optional [config section](#configuration) and a [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) section.
+A module consists of one file with an optional [config section](#configuration) and one or more [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) sections.
 
 ````markdown
 ```yaml
@@ -112,7 +112,7 @@ A module consists of one file with one to two parts - an optional [config sectio
 ---
 Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
 
-For [independent modules](#independent-modules), the file has an additional Containerfile section.
+For [split modules](#split-modules), the file has a second Containerfile section and can optionally have a third.
 
 ### Module Parts
 
@@ -149,8 +149,8 @@ requires:
 # Files to be pulled in with this module
 required_files:
   - file/path
-# Is this module an independent module
-independent: true
+# Split this module across build, install, and optional finalize fragments
+split: true
 ```
 All of the above settings are optional
 
@@ -183,20 +183,20 @@ RUN apk update \
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
-### Independent Modules
+### Split Modules
 
-Certain builders like docker's buildkit can parallelize builds for faster building and smaller images. Independent modules take advantage of this. They have a **build stage** and an **install stage**, defined by two `containerfile`/`dockerfile` blocks in the module file. The first block is the build stage and the second block is the install stage. Mark the module as independent by setting `independent: true` in its configuration block (it defaults to `false` when omitted).
+Certain builders like Docker's BuildKit can parallelize stages for faster builds and smaller images. Split modules take advantage of this by dividing a module into two or three `containerfile`/`dockerfile` blocks: a required **build fragment**, a required **install fragment**, and an optional **finalize fragment**. Mark the module as split by setting `split: true` in its configuration block (it defaults to `false` when omitted).
 
-When modules are combined, the **build stages of all independent modules are hoisted to the start** of the generated Containerfile, and the **install stage is injected where the module is declared** in the `yard.yaml` outputs (like a normal module). This is useful for defining dependencies in isolated build stages (e.g. a virtual environment built in a `builder` stage) and copying the result into the final image.
+When modules are combined, the **build fragments of all split modules are hoisted to the start** of the generated Containerfile, the **install fragment is injected where the module is declared**, and each optional **finalize fragment is appended after all declared modules**. Finalize fragments preserve module declaration order. This is useful for defining dependencies in isolated build stages (for example, a virtual environment built in a `builder` stage), copying the result into the final image, and deferring instructions that must run after the rest of the image is assembled.
 
-For example, given an independent module `python-deps` (`python_deps.md`):
+For example, given a split module `python-deps` (`python_deps.md`):
 
 ````markdown
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
-description: "Python dependencies installed in an independent build stage"
-independent: true
+description: "Python dependencies built in a split module"
+split: true
 ```
 ```dockerfile
 # Build & install dependencies
@@ -212,6 +212,10 @@ RUN pip install --no-cache-dir numpy pandas scipy
 COPY --from=python-deps-builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
+```
+```dockerfile
+# Run after every declared module
+RUN test -x /opt/venv/bin/python
 ```
 ````
 
@@ -251,6 +255,9 @@ COPY --from=python-deps-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN echo after
+
+# Run after every declared module
+RUN test -x /opt/venv/bin/python
 ```
 
 ## Installation
@@ -298,7 +305,7 @@ done
 
 ### Cache Busting
 
-`yard build --with-cache-busting` transforms the generated Containerfile so that a cache busting argument is inserted between each module -
+`yard build --with-cache-busting` transforms the generated Containerfile so that a cache-busting argument is inserted before each module fragment:
 
 ```dockerfile
 ARG CACHE_BUST_<MODULE_NAME>=1

@@ -83,12 +83,12 @@ pub struct YamlModule {
     pub args: Option<YamlArgs>,
     /// This is a modules description
     pub description: Option<String>,
-    /// If true, this module is an independent module. Independent modules have a build stage
-    /// and an install stage, defined by two containerfile/dockerfile blocks. The build stage is
-    /// hoisted to the start of the generated Containerfile and the install stage is injected where
-    /// the module is declared. Defaults to false.
+    /// If true, this module is split into build, install, and optional finalize fragments. The
+    /// build fragment is hoisted to the start of the generated Containerfile, the install fragment
+    /// is injected where the module is declared, and the finalize fragment is appended after all
+    /// declared modules. Defaults to false.
     #[serde(default)]
-    pub independent: bool,
+    pub split: bool,
     /// Module files that must be included earlier in each output that uses this module. Paths are
     /// relative to this module file.
     pub requires: Option<Vec<String>>,
@@ -204,10 +204,12 @@ struct UseInputModule {
 #[derive(Debug, Clone)]
 struct ModuleBuilder {
     containerfile_data: String,
-    /// Install stage template for independent modules. `None` for non-independent modules.
-    install_stage_data: Option<String>,
-    /// Whether this module is an independent module.
-    independent: bool,
+    /// Install fragment template for split modules. `None` for regular modules.
+    install_fragment_data: Option<String>,
+    /// Optional fragment appended after all declared modules.
+    finalize_fragment_data: Option<String>,
+    /// Whether this module is split across output positions.
+    split: bool,
     required_modules: Vec<ModuleRequirement>,
     required_files: Vec<String>,
     required_template_values: HashSet<String>,
@@ -269,17 +271,25 @@ impl ModuleBuilder {
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
         validate_path_references(&self.required_files)?;
-        if self.independent && self.install_stage_data.is_none() {
+        if self.split && self.install_fragment_data.is_none() {
             return Err(user_error(format!(
-                "{} is marked as independent (`independent: true`) but has no install stage. Independent modules require two Containerfile blocks: a build stage followed by an install stage.",
+                "{} is marked as split (`split: true`) but has no install fragment. Split modules require at least two Containerfile blocks: a build fragment followed by an install fragment.",
+                self.source_info.user_label()
+            ))
+            .context(self.source_info.source_location()));
+        }
+        if !self.split && self.install_fragment_data.is_some() {
+            return Err(user_error(format!(
+                "{} has multiple Containerfile blocks but is not marked as split. Add `split: true` to its configuration or combine the blocks.",
                 self.source_info.user_label()
             ))
             .context(self.source_info.source_location()));
         }
         Ok(Module {
             containerfile_template: self.containerfile_data,
-            install_stage_template: self.install_stage_data,
-            independent: self.independent,
+            install_fragment_template: self.install_fragment_data,
+            finalize_fragment_template: self.finalize_fragment_data,
+            split: self.split,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
             name: self.name,
@@ -300,10 +310,12 @@ struct Containerfiles {
 #[derive(Debug, Clone)]
 struct Module {
     containerfile_template: String,
-    /// Install stage template for independent modules. `None` for non-independent modules.
-    install_stage_template: Option<String>,
-    /// Whether this module is an independent module.
-    independent: bool,
+    /// Install fragment template for split modules. `None` for regular modules.
+    install_fragment_template: Option<String>,
+    /// Optional fragment appended after all declared modules.
+    finalize_fragment_template: Option<String>,
+    /// Whether this module is split across output positions.
+    split: bool,
     provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -418,8 +430,10 @@ impl SourceInfo for SourceInfoKind {
 pub struct ModuleFileData {
     pub containerfile_data: String,
     pub config_data: String,
-    /// Install stage for independent modules. `None` for non-independent modules.
-    pub install_stage_data: Option<String>,
+    /// Install fragment for split modules. `None` when only one Containerfile block is present.
+    pub install_fragment_data: Option<String>,
+    /// Optional finalize fragment for split modules.
+    pub finalize_fragment_data: Option<String>,
     pub source_info: SourceInfoKind,
 }
 
@@ -648,7 +662,8 @@ async fn resolve_yard_yaml(
             ModuleFileData {
                 containerfile_data: module_data.containerfile,
                 config_data: module_data.config,
-                install_stage_data: module_data.install_stage,
+                install_fragment_data: module_data.install_fragment,
+                finalize_fragment_data: module_data.finalize_fragment,
                 source_info: SourceInfoKind::Local(LocalModuleInfo { path, name }),
             },
         );
@@ -684,8 +699,9 @@ async fn resolve_yard_yaml(
                     modules_for_container_file.push(
                         ModuleBuilder {
                             containerfile_data: inline.value.clone(),
-                            install_stage_data: None,
-                            independent: false,
+                            install_fragment_data: None,
+                            finalize_fragment_data: None,
+                            split: false,
                             required_modules: Vec::new(),
                             required_files: Vec::new(),
                             required_template_values: HashSet::new(),
@@ -984,9 +1000,9 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         required_files,
         required_template_values,
         optional_template_values,
-        independent,
+        split,
     ) = (|| -> eros::Result<_> {
-        // If there is no config block, default to a non-independent module.
+        // If there is no config block, default to a regular, non-split module.
         let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty() {
             serde_yaml::Value::Null
         } else {
@@ -1014,7 +1030,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         }
         let YamlModule {
             args,
-            independent,
+            split,
             requires,
             required_files,
             ..
@@ -1050,7 +1066,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             required_files,
             required_template_values,
             optional_template_values,
-            independent,
+            split,
         ))
     })()
     .with_context(|| module_files.source_info.source_location())
@@ -1063,8 +1079,9 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
-        install_stage_data: module_files.install_stage_data,
-        independent,
+        install_fragment_data: module_files.install_fragment_data,
+        finalize_fragment_data: module_files.finalize_fragment_data,
+        split,
         required_modules,
         required_files,
         required_template_values,
@@ -1179,14 +1196,16 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
 
     let mut outputs = Vec::new();
     for (containerfile_name, included_modules) in yard.name_to_module {
-        // Build stages of independent modules are hoisted to the start of the Containerfile.
-        let mut build_stage_parts: Vec<String> = Vec::new();
+        // Build fragments of split modules are hoisted to the start of the Containerfile, while
+        // finalize fragments are appended after all declared modules.
+        let mut build_fragment_parts: Vec<String> = Vec::new();
         let mut container_file_resolved_parts = Vec::new();
+        let mut finalize_fragment_parts: Vec<String> = Vec::new();
         for included_module in included_modules {
             let label = included_module.source_info.label();
-            if included_module.independent {
-                // Hoist the build stage to the start.
-                let mut build_stage = render(
+            if included_module.split {
+                // Hoist the build fragment to the start.
+                let mut build_fragment = render(
                     &tera,
                     &included_module.containerfile_template,
                     &included_module.provided_template_values,
@@ -1197,16 +1216,16 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                         .name
                         .as_deref()
                         .expect("Should be provided at this point");
-                    build_stage = apply_cache_busting(&build_stage, name);
+                    build_fragment = apply_cache_busting(&build_fragment, name);
                 }
-                let part = format!("####  {label} (build stage)  ####\n\n{build_stage}\n");
-                build_stage_parts.push(part);
-                // Inject the install stage where the module is declared.
+                let part = format!("####  {label} (build fragment)  ####\n\n{build_fragment}\n");
+                build_fragment_parts.push(part);
+                // Inject the install fragment where the module is declared.
                 let install_template = included_module
-                    .install_stage_template
+                    .install_fragment_template
                     .as_ref()
-                    .expect("Independent modules must have an install stage; this is checked in ModuleBuilder::build");
-                let mut install_stage = render(
+                    .expect("Split modules must have an install fragment; this is checked in ModuleBuilder::build");
+                let mut install_fragment = render(
                     &tera,
                     install_template,
                     &included_module.provided_template_values,
@@ -1217,10 +1236,31 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                         .name
                         .as_deref()
                         .expect("Should be provided at this point");
-                    install_stage = apply_cache_busting(&install_stage, name);
+                    install_fragment = apply_cache_busting(&install_fragment, name);
                 }
-                let part = format!("####  {label} (install stage)  ####\n\n{install_stage}\n");
+                let part =
+                    format!("####  {label} (install fragment)  ####\n\n{install_fragment}\n");
                 container_file_resolved_parts.push(part);
+
+                if let Some(finalize_template) = included_module.finalize_fragment_template.as_ref()
+                {
+                    let mut finalize_fragment = render(
+                        &tera,
+                        finalize_template,
+                        &included_module.provided_template_values,
+                        &included_module.source_info,
+                    )?;
+                    if with_cache_busting {
+                        let name = included_module
+                            .name
+                            .as_deref()
+                            .expect("Should be provided at this point");
+                        finalize_fragment = apply_cache_busting(&finalize_fragment, name);
+                    }
+                    let part =
+                        format!("####  {label} (finalize fragment)  ####\n\n{finalize_fragment}\n");
+                    finalize_fragment_parts.push(part);
+                }
             } else {
                 let mut rendered_part = render(
                     &tera,
@@ -1239,8 +1279,9 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                 container_file_resolved_parts.push(part);
             }
         }
-        let mut all_parts = build_stage_parts;
+        let mut all_parts = build_fragment_parts;
         all_parts.extend(container_file_resolved_parts);
+        all_parts.extend(finalize_fragment_parts);
         outputs.push((containerfile_name, all_parts.join("\n")));
     }
     Ok(outputs)
@@ -1258,9 +1299,10 @@ enum CapturingState {
 pub struct ModuleData {
     pub containerfile: String,
     pub config: String,
-    /// Install stage for independent modules. `None` for non-independent modules or when only one
-    /// containerfile/dockerfile block is present.
-    pub install_stage: Option<String>,
+    /// Install fragment for split modules. `None` when only one Containerfile block is present.
+    pub install_fragment: Option<String>,
+    /// Optional third fragment appended after all declared modules.
+    pub finalize_fragment: Option<String>,
 }
 
 #[eros::context("Could not read '{}' as a module.", &PathBuf::from(&path).display())]
@@ -1271,8 +1313,8 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
         .user_context(
             "Could not read a referenced module file. Check that it exists and is readable.",
         )?;
-    // Collect containerfile/dockerfile blocks in the order they appear. Independent modules use
-    // two blocks: the first is the build stage, the second is the install stage.
+    // Collect Containerfile blocks in the order they appear. Split modules use a build fragment,
+    // an install fragment, and optionally a finalize fragment.
     let mut container_data: Vec<String> = Vec::new();
     let mut config_data = None;
     let mut capture_status = CapturingState::None;
@@ -1334,47 +1376,35 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
         }
         CapturingState::None => {}
     }
-    Ok(match (container_data.is_empty(), config_data) {
+    match (container_data.is_empty(), config_data) {
         (true, None) => {
             // No sections found for either so interpret the entire file as a containerfile
-            ModuleData {
+            Ok(ModuleData {
                 containerfile: data,
                 config: String::new(),
-                install_stage: None,
+                install_fragment: None,
+                finalize_fragment: None,
+            })
+        }
+        (true, Some(_)) => Err(user_error(
+            "A module has a YAML configuration block but no Containerfile block.",
+        )),
+        (false, config_data) => {
+            if container_data.len() > 3 {
+                return Err(user_error(format!(
+                    "A module has {} Containerfile blocks, but at most three are supported. Regular modules use one block; split modules use a build fragment, an install fragment, and an optional finalize fragment.",
+                    container_data.len()
+                )));
             }
+            let mut fragments = container_data.into_iter();
+            Ok(ModuleData {
+                containerfile: fragments.next().expect("container_data is not empty"),
+                config: config_data.unwrap_or_default(),
+                install_fragment: fragments.next(),
+                finalize_fragment: fragments.next(),
+            })
         }
-        (true, Some(_)) => {
-            return Err(user_error(
-                "A module has a YAML configuration block but no Containerfile block.",
-            ));
-        }
-        (false, None) => {
-            // No config block. If there are two containerfile blocks, treat the second as the
-            // install stage (independent module without explicit config).
-            let install_stage = if container_data.len() > 1 {
-                Some(container_data.remove(1))
-            } else {
-                None
-            };
-            ModuleData {
-                containerfile: container_data.remove(0),
-                config: String::new(),
-                install_stage,
-            }
-        }
-        (false, Some(config_data)) => {
-            let install_stage = if container_data.len() > 1 {
-                Some(container_data.remove(1))
-            } else {
-                None
-            };
-            ModuleData {
-                containerfile: container_data.remove(0),
-                config: config_data,
-                install_stage,
-            }
-        }
-    })
+    }
 }
 
 fn apply_cache_busting(containerfile: &str, module_name: &str) -> String {

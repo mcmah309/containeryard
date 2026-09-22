@@ -1,0 +1,7 @@
+inputs:
+  modules:
+    module: module.md
+
+outputs:
+  output.test.Containerfile:
+    - module:

@@ -21,7 +21,7 @@ pub enum Commands {
         /// get overriden.
         #[clap(long, default_value = "false")]
         do_not_refetch: bool,
-        /// If set, cache busting `ARG` statements are injected before each module. This allows busting build cache for specific modules.
+        /// If set, cache-busting `ARG` statements are injected before each module fragment. This allows busting build cache for specific modules.
         #[clap(long, default_value = "false")]
         with_cache_busting: bool,
         /// Skip `requires` checks for these module names. May be repeated or supplied as a comma-separated list.

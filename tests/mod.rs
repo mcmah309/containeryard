@@ -183,60 +183,111 @@ fn debug_errors_include_developer_context() {
 }
 
 #[test]
-fn independent_modules() {
-    let output_file = TestOutputFile::new("tests/independent_modules");
+fn split_modules() {
+    let output_file = TestOutputFile::new("tests/split_modules");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
-        .current_dir("tests/independent_modules")
+        .current_dir("tests/split_modules")
         .arg("build")
         .assert();
     assert.success();
     let output = fs::read_to_string(output_file.path()).unwrap();
 
-    // The build stage must be hoisted to the start of the generated Containerfile.
-    let build_stage_idx = output
+    // The build fragment must be hoisted to the start of the generated Containerfile.
+    let build_fragment_idx = output
         .find("FROM python:3.11-slim AS builder")
-        .expect("build stage should be present");
+        .expect("build fragment should be present");
     let inline_from_idx = output
         .find("FROM python:3.11-slim\n")
         .expect("inline FROM should be present");
     assert!(
-        build_stage_idx < inline_from_idx,
-        "independent build stage should be hoisted before the inline FROM"
+        build_fragment_idx < inline_from_idx,
+        "split build fragment should be hoisted before the inline FROM"
     );
 
-    // The build stage content.
+    // The build fragment content.
     assert!(output.contains("RUN python -m venv /opt/venv"));
     assert!(output.contains("RUN pip install --no-cache-dir numpy pandas scipy"));
 
-    // The install stage is injected where the module is declared, after the inline FROM.
-    let install_stage_idx = output
+    // The install fragment is injected where the module is declared, after the inline FROM.
+    let install_fragment_idx = output
         .find("COPY --from=builder /opt/venv /opt/venv")
-        .expect("install stage should be present");
+        .expect("install fragment should be present");
     assert!(
-        install_stage_idx > inline_from_idx,
-        "install stage should be injected after the inline FROM"
+        install_fragment_idx > inline_from_idx,
+        "install fragment should be injected after the inline FROM"
     );
 
-    // The trailing inline module is preserved after the install stage.
+    // The trailing inline module is preserved after the install fragment.
     let echo_idx = output
         .find("RUN echo hello")
         .expect("echo should be present");
     assert!(
-        echo_idx > install_stage_idx,
-        "trailing inline module should come after the install stage"
+        echo_idx > install_fragment_idx,
+        "trailing inline module should come after the install fragment"
     );
+
+    // The optional finalize fragment is appended after all declared modules.
+    let finalize_fragment_idx = output
+        .find("RUN echo finalized")
+        .expect("finalize fragment should be present");
+    assert!(
+        finalize_fragment_idx > echo_idx,
+        "finalize fragment should be appended after all declared modules"
+    );
+
+    // A split module may omit the finalize fragment.
+    let two_fragment_install_idx = output
+        .find("COPY --from=metadata-builder /etc/alpine-release /tmp/alpine-release")
+        .expect("two-fragment split module should be present");
+    assert!(two_fragment_install_idx < finalize_fragment_idx);
 
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
-        .current_dir("tests/independent_modules")
+        .current_dir("tests/split_modules")
         .arg("build")
         .arg("--with-cache-busting")
         .assert();
     assert.success();
     let output = fs::read_to_string(output_file.path()).unwrap();
-    // Cache busting ARGs are injected before both the build and install stages.
-    assert!(output.contains("ARG CACHE_BUST_PYTHON_DEPS=1"));
+    // Cache busting ARGs are injected before all three fragments.
+    assert_eq!(output.matches("ARG CACHE_BUST_PYTHON_DEPS=1").count(), 3);
+}
+
+#[test]
+fn multiple_blocks_require_split() {
+    let _output = TestOutputFile::new("tests/non_split_multiple_blocks");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/non_split_multiple_blocks")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not marked as split"));
+}
+
+#[test]
+fn split_modules_require_an_install_fragment() {
+    let _output = TestOutputFile::new("tests/split_missing_install");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/split_missing_install")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("has no install fragment"));
+}
+
+#[test]
+fn modules_reject_more_than_three_containerfile_blocks() {
+    let _output = TestOutputFile::new("tests/too_many_module_blocks");
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/too_many_module_blocks")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("at most three are supported"));
 }
 
 #[test]
