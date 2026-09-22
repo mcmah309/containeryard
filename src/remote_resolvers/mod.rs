@@ -6,6 +6,8 @@ use std::{
 };
 
 use crate::build::ModuleFileData;
+use crate::user_error::user_error;
+use eros::Context;
 use git::Git;
 use tokio::fs;
 use tracing::{info, trace};
@@ -55,7 +57,12 @@ pub trait GitProvider {
             "`{:?}` not found in cache, downloading from remote",
             reference_info
         );
-        let file_data = self.extract_remote_path_data(remote_path).await?;
+        let file_data = self
+            .extract_remote_path_data(remote_path)
+            .await
+            .with_context(|| {
+                format!("Retrieve remote path '{remote_path}' from '{url}' at commit '{commit}'")
+            })?;
 
         trace!("Saving `{:?}` downloaded from remote", reference_info);
         save_to_cache(
@@ -80,8 +87,21 @@ pub trait GitProvider {
         let file_data = self
             .extract_remote_path_data_save_save_to_cache(remote_path)
             .await?;
-        fs::create_dir_all(local_download_path.parent().unwrap()).await?;
-        fs::write(local_download_path, file_data).await?;
+        let parent = local_download_path
+            .parent()
+            .ok_or_else(|| user_error("A required file has an invalid local destination path."))?;
+        fs::create_dir_all(parent)
+            .await
+            .with_context(|| format!("Create directory '{}'", parent.display()))
+            .user_context(
+                "Could not create a directory for a required file. Check destination permissions.",
+            )?;
+        fs::write(local_download_path, file_data)
+            .await
+            .with_context(|| format!("Write required file to '{}'", local_download_path.display()))
+            .user_context(
+                "Could not save a required file. Check available disk space and destination permissions.",
+            )?;
         Ok(())
     }
 }
@@ -145,14 +165,16 @@ pub fn save_to_cache(
     repo_name: &str,
     commit: &str,
 ) -> eros::Result<()> {
-    let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit);
+    let cache_file_path = path_in_cache_dir(file_path, provider, owner, repo_name, commit)?;
     if !cache_file_path.exists() {
         if let Some(parent) = cache_file_path.parent()
             && !parent.exists()
         {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Create cache directory '{}'", parent.display()))?;
         }
-        std::fs::write(cache_file_path, data)?;
+        std::fs::write(&cache_file_path, data)
+            .with_context(|| format!("Write cache file '{}'", cache_file_path.display()))?;
     }
     Ok(())
 }
@@ -163,14 +185,18 @@ pub fn path_in_cache_dir(
     owner: &str,
     repo_name: &str,
     commit: &str,
-) -> PathBuf {
-    dirs::cache_dir()
-        .expect("Could not determine cache directory of platform")
+) -> eros::Result<PathBuf> {
+    let cache_dir = dirs::cache_dir().ok_or_else(|| {
+        user_error(
+            "Could not determine the system cache directory. Set a valid cache directory for this platform.",
+        )
+    })?;
+    Ok(cache_dir
         .join("containeryard")
         .join("extracted_files")
         .join(provider)
         .join(owner)
         .join(repo_name)
         .join(commit)
-        .join(file_path)
+        .join(file_path))
 }

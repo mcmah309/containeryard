@@ -1,11 +1,14 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use eros::{Context, bail};
+use eros::Context;
 use regex::Regex;
 use tokio::{fs, process::Command};
 use tracing::trace;
 
-use crate::build::{ModuleData, RemoteModuleInfo, SourceInfoKind, read_module_file};
+use crate::{
+    build::{ModuleData, RemoteModuleInfo, SourceInfoKind, read_module_file},
+    user_error::user_error,
+};
 
 use super::{GitProvider, ModuleFileData, ReferenceInfo, path_in_cache_dir};
 
@@ -49,7 +52,7 @@ impl GitProvider for Git {
                 &self.repo_owner,
                 &self.repo_name,
                 &self.commit,
-            );
+            )?;
             if !module_path_cache.exists() {
                 trace!(
                     "Module `{}` not found in cache. Retrieving from remote...",
@@ -58,7 +61,15 @@ impl GitProvider for Git {
                 self.retrieve_file_and_put_at(&module_path, &module_path_cache)
                     .await?;
             }
-            assert!(module_path_cache.exists());
+            if !module_path_cache.exists() {
+                return Err(eros::error!(
+                    "Remote module was retrieved but is missing from cache at '{}'",
+                    module_path_cache.display()
+                )
+                .user_context(
+                    "A remote module could not be loaded after it was downloaded. Try clearing the Container Yard cache and run the command again.",
+                ));
+            }
 
             let module_data: ModuleData = read_module_file(&module_path_cache).await?;
 
@@ -95,8 +106,12 @@ impl GitProvider for Git {
 
     async fn extract_remote_path_data(&self, remote_path: &str) -> eros::Result<String> {
         // Ensure repo is downloaded
-        let provider_git_cache_dir = dirs::cache_dir()
-            .expect("Could not determine cache directory of platform")
+        let cache_dir = dirs::cache_dir().ok_or_else(|| {
+            user_error(
+                "Could not determine the system cache directory. Set a valid cache directory for this platform.",
+            )
+        })?;
+        let provider_git_cache_dir = cache_dir
             .join("containeryard")
             .join("sources")
             .join("git_repos")
@@ -106,16 +121,24 @@ impl GitProvider for Git {
         let mut will_clone = false;
         if repo_dir.is_dir() {
             if !repo_dir.join(".git").is_dir() {
-                bail!(
+                return Err(eros::error!(
                     "Cached directory for repo `{}` exists at `{}`, but it is not a git directory.",
                     self.url,
                     repo_dir.to_str().unwrap_or("")
                 )
+                .user_context(
+                    "A cached remote is invalid. Clear the Container Yard cache and try again.",
+                ));
             }
             trace!("Found a git cloned repo for `{}`", self.url,);
         } else {
             will_clone = true;
-            fs::create_dir_all(&repo_dir).await?;
+            fs::create_dir_all(&repo_dir)
+                .await
+                .with_context(|| format!("Create Git cache directory '{}'", repo_dir.display()))
+                .user_context(
+                    "Could not create the Git cache directory. Check cache directory permissions.",
+                )?;
         }
 
         if will_clone {
@@ -135,16 +158,22 @@ impl GitProvider for Git {
                         self.url,
                         e
                     )
-                })?;
+                })
+                .user_context(
+                    "Could not run Git. Make sure Git is installed and available on PATH.",
+                )?;
             if !clone_output.status.success() {
-                bail!(
+                return Err(eros::error!(
                     "Git failed with {}.\nCould not clone git repo `{}` to `{}`.\nstdout:\n{}\nstderr:\n{}",
                     &clone_output.status,
                     self.url,
                     provider_git_cache_dir.to_str().unwrap_or(""),
                     String::from_utf8_lossy(&clone_output.stdout),
                     String::from_utf8_lossy(&clone_output.stderr)
-                );
+                )
+                .user_context(
+                    "Could not clone a remote repository. Check its URL, your network connection, and Git credentials.",
+                ));
             }
         } else {
             trace!(
@@ -163,16 +192,22 @@ impl GitProvider for Git {
                         self.url,
                         e
                     )
-                })?;
+                })
+                .user_context(
+                    "Could not run Git. Make sure Git is installed and available on PATH.",
+                )?;
             if !fetch_output.status.success() {
-                bail!(
+                return Err(eros::error!(
                     "Git failed with {}.\nCould not pull git repo `{}` to `{}`.\nstdout:\n{}\nstderr:\n{}",
                     &fetch_output.status,
                     self.url,
                     provider_git_cache_dir.to_str().unwrap_or(""),
                     String::from_utf8_lossy(&fetch_output.stdout),
                     String::from_utf8_lossy(&fetch_output.stderr)
-                );
+                )
+                .user_context(
+                    "Could not refresh a remote repository. Check your network connection and Git credentials.",
+                ));
             }
         }
 
@@ -192,33 +227,38 @@ impl GitProvider for Git {
                     self.url,
                     e
                 )
-            })?;
+            })
+            .user_context("Could not run Git. Make sure Git is installed and available on PATH.")?;
         if !checkout_output.status.success() {
-            bail!(
+            return Err(eros::error!(
                 "Git failed with {}.\nCould not checkout commit `{}` in git repo `{}`.\nstdout:\n{}\nstderr:\n{}",
                 &checkout_output.status,
                 self.commit,
                 self.url,
                 String::from_utf8_lossy(&checkout_output.stdout),
                 String::from_utf8_lossy(&checkout_output.stderr)
-            );
+            )
+            .user_context(
+                "Could not check out a remote commit. Check that the commit exists in the repository.",
+            ));
         }
 
         // get file data
         let remote_file_path = repo_dir.join(remote_path);
         if !remote_file_path.is_file() {
-            bail!(
-                "Could not find file at remote path `{}` in repo `{}` at commit `{}`",
-                &remote_path,
-                &self.url,
-                &self.commit
-            )
+            return Err(user_error(format!(
+                "Remote file '{remote_path}' was not found at the configured commit. Check the path and commit in yard.yaml."
+            ))
+            .context(format!(
+                "Remote file missing in repo '{}' at commit '{}'",
+                self.url, self.commit
+            )));
         }
 
         let file_data = fs::read_to_string(&remote_file_path)
             .await
             .map_err(|e| eros::error!(e))
-            .with_context(|| format!("Could not read `{}`", &remote_file_path.display()))?;
+            .with_context(|| format!("Could not read `{}`", remote_file_path.display()))?;
 
         Ok(file_data)
     }
@@ -238,7 +278,10 @@ fn url_to_repo_info(url: &str) -> eros::Result<RepoInfo> {
     } else if url.starts_with("http") {
         (owner, name) = extract_user_and_repo_from_http(url)?;
     } else {
-        bail!("Unknown url type for `{url}`. Expected to start with `git@` or `http`")
+        return Err(user_error(
+            "A remote has an unsupported URL. Use an HTTP(S) URL or an SSH URL beginning with `git@`.",
+        )
+        .context(format!("Unsupported remote URL: '{url}'")));
     }
     let provider = if url.contains("github.com") {
         "github".to_string()
@@ -260,10 +303,14 @@ fn extract_user_and_repo_from_ssh(ssh_url: &str) -> eros::Result<(String, String
             let repo = caps.get(2).map(|m| m.as_str().to_string())?;
             Some((user, repo))
         })
-        .ok_or(eros::error!(
-            "Could not extract user and repo from ssh url `{}`",
-            ssh_url
-        ))
+        .ok_or_else(|| {
+            user_error(
+                "An SSH remote URL is invalid. Expected a value like `git@example.com:owner/repository.git`.",
+            )
+            .context(format!(
+                "Could not extract owner and repository from SSH URL '{ssh_url}'"
+            ))
+        })
 }
 
 fn extract_user_and_repo_from_http(url: &str) -> eros::Result<(String, String)> {
@@ -274,10 +321,14 @@ fn extract_user_and_repo_from_http(url: &str) -> eros::Result<(String, String)> 
             let repo = caps.get(2).map(|m| m.as_str().to_string())?;
             Some((user, repo))
         })
-        .ok_or(eros::error!(
-            "Could not extract user and repo from url `{}`",
-            url
-        ))
+        .ok_or_else(|| {
+            user_error(
+                "An HTTP remote URL is invalid. Expected a value like `https://example.com/owner/repository.git`.",
+            )
+            .context(format!(
+                "Could not extract owner and repository from HTTP URL '{url}'"
+            ))
+        })
 }
 
 // /// characters not allowed in dirs on windows and linux

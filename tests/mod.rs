@@ -103,6 +103,39 @@ fn output_order() {
 }
 
 #[test]
+fn normal_errors_show_user_context_without_developer_details() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .env_remove("CONTAINERYARD_DEBUG")
+        .args(["outputs", "tests/does-not-exist"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains(
+                "Could not list the configured outputs. Check that yard.yaml exists and is valid.",
+            )
+            .and(predicate::str::contains("For developer diagnostics"))
+            .and(predicate::str::contains("Developer diagnostics:").not())
+            .and(predicate::str::contains("Run `yard outputs`").not()),
+        );
+}
+
+#[test]
+fn debug_errors_include_developer_context() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .env("CONTAINERYARD_DEBUG", "1")
+        .args(["outputs", "tests/does-not-exist"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("Developer diagnostics:")
+                .and(predicate::str::contains("Run `yard outputs`"))
+                .and(predicate::str::contains("For developer diagnostics").not()),
+        );
+}
+
+#[test]
 fn independent_modules() {
     let output_file = TestOutputFile::new("tests/independent_modules");
     let assert = assert_cmd::Command::cargo_bin("yard")

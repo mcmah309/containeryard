@@ -5,7 +5,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use eros::{Context, bail};
+use eros::Context;
 use indexmap::IndexMap;
 use jsonschema::{Draft, Validator};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,10 @@ use tera::Tera;
 use tokio::fs;
 use tracing::trace;
 
-use crate::remote_resolvers::{GitProvider, create_provider};
+use crate::{
+    remote_resolvers::{GitProvider, create_provider},
+    user_error::user_error,
+};
 
 pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 
@@ -25,31 +28,39 @@ pub async fn build(
     let (parsed_yard_file, post_build_hook) = parse_yard_yaml(path).await?;
     let resolved_yard_file = resolve_yard_yaml(parsed_yard_file, path, do_not_refetch).await?;
     if resolved_yard_file.name_to_module.is_empty() {
-        bail!("No modules were resolved.")
+        return Err(user_error(
+            "No modules were resolved. Add at least one module to an output in yard.yaml.",
+        ));
     }
     let outputs = apply_templating(resolved_yard_file, with_cache_busting)?;
     if outputs.is_empty() {
-        bail!("No Containerfiles where created.")
+        return Err(user_error(
+            "No Containerfiles were created. Add at least one entry under `outputs` in yard.yaml.",
+        ));
     }
     for (file_name, content) in outputs {
         let file_path = path.join(&file_name);
         fs::write(&file_path, content)
             .await
-            .with_context(|| format!("Could not write to '{}'.", &file_name))?;
+            .with_context(|| format!("Could not write to '{}'.", file_path.display()))
+            .with_user_context(|| {
+                format!(
+                    "Could not write output '{}'. Check that the destination is writable.",
+                    file_name
+                )
+            })?;
         println!(
-            "Created '{}' at '{}",
-            &file_name,
-            &file_path
-                .canonicalize()
-                .expect("Could not get absolute path.")
-                .display()
+            "Created '{}' at '{}'",
+            file_name,
+            file_path.canonicalize().unwrap_or(file_path).display()
         );
     }
 
     if let Some(post_build_hook) = post_build_hook {
         duct_sh::sh_dangerous(&post_build_hook)
             .run()
-            .with_context(|| format!("Post-build hook `{post_build_hook}` Failed"))?;
+            .with_context(|| format!("Post-build hook `{post_build_hook}` failed"))
+            .user_context("The post-build hook failed. Review the hook and try it manually.")?;
     }
     Ok(())
 }
@@ -219,31 +230,40 @@ impl ModuleBuilder {
     fn build(self) -> eros::Result<Module> {
         for var in self.required_template_values.iter() {
             if !self.provided_template_values.contains_key(var) {
-                bail!(
-                    "Required variable '{}' not found for:\n{}",
+                return Err(user_error(format!(
+                    "Required variable '{}' was not provided for {}.",
                     var,
+                    self.source_info.user_label()
+                ))
+                .context(format!(
+                    "Missing required variable for {}",
                     self.source_info.source_location()
-                );
+                )));
             }
         }
         for (var, val) in self.provided_template_values.iter() {
             if !self.required_template_values.contains(var)
                 && !self.optional_template_values.contains(var)
             {
-                bail!(
-                    "Provided template variable '{}' not found in the module for:\n{}",
+                return Err(user_error(format!(
+                    "Template variable '{}' is not accepted by {}.",
                     var,
+                    self.source_info.user_label()
+                ))
+                .context(format!(
+                    "Unexpected template variable for {}",
                     self.source_info.source_location()
-                );
+                )));
             }
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
         validate_path_references(&self.required_files)?;
         if self.independent && self.install_stage_data.is_none() {
-            bail!(
-                "Module is marked as independent (`independent: true`), but no install stage was found. Independent modules require two containerfile/dockerfile blocks - the first is the build stage and the second is the install stage.\n{}",
-                self.source_info.source_location()
-            );
+            return Err(user_error(format!(
+                "{} is marked as independent (`independent: true`) but has no install stage. Independent modules require two Containerfile blocks: a build stage followed by an install stage.",
+                self.source_info.user_label()
+            ))
+            .context(self.source_info.source_location()));
         }
         Ok(Module {
             containerfile_template: self.containerfile_data,
@@ -337,10 +357,18 @@ pub enum SourceInfoKind {
 }
 
 impl SourceInfoKind {
+    fn user_label(&self) -> String {
+        match self {
+            SourceInfoKind::Local(info) => format!("local module '{}'", info.name),
+            SourceInfoKind::Remote(info) => format!("remote module '{}'", info.name),
+            SourceInfoKind::Inline(_) => "an inline module".to_owned(),
+        }
+    }
+
     fn label(&self) -> String {
         match self {
-            SourceInfoKind::Local(info) => format!("{}: {}", &info.name, &info.path),
-            SourceInfoKind::Remote(info) => format!("{}: {}", &info.name, &info.path),
+            SourceInfoKind::Local(info) => format!("{}: {}", info.name, info.path),
+            SourceInfoKind::Remote(info) => format!("{}: {}", info.name, info.path),
             SourceInfoKind::Inline(_) => "~INLINE~".to_owned(),
         }
     }
@@ -390,11 +418,16 @@ async fn load_yard_file(
 ) -> eros::Result<YamlYard> {
     let yard_yaml_file_data = fs::read_to_string(yard_file_path)
         .await
-        .with_context(|| format!("Could read '{}'.", yard_file_path.display()))?;
+        .with_context(|| format!("Could not read '{}'.", yard_file_path.display()))
+        .user_context("Could not read yard.yaml. Check that it exists and is readable.")?;
     let yard_yaml: serde_yaml::Value = serde_yaml::from_str(&yard_yaml_file_data)
-        .with_context(|| format!("{} is not valid yaml.", yard_file_path.display()))?;
+        .with_context(|| format!("'{}' is not valid YAML.", yard_file_path.display()))
+        .user_context("yard.yaml contains invalid YAML. Check its syntax and indentation.")?;
     validate_against_schema(compiled_schema, &yard_yaml)
-        .with_context(|| format!("For path '{}'.", &yard_file_path.display()))?;
+        .with_context(|| format!("Validate schema for '{}'.", yard_file_path.display()))
+        .user_context(
+            "yard.yaml does not match the expected schema. Check its field names and value types.",
+        )?;
     let yard_yaml: YamlYard = serde_yaml::from_value(yard_yaml).with_context(|| {
         format!(
             "Was able to serialize '{}', but was unable to convert to internal expected model.",
@@ -431,7 +464,8 @@ async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)
     if let Some(pre_build_hook) = pre_build_hook {
         duct_sh::sh_dangerous(pre_build_hook)
             .run()
-            .with_context(|| format!("Pre-build hook `{pre_build_hook}` Failed"))?;
+            .with_context(|| format!("Pre-build hook `{pre_build_hook}` failed"))
+            .user_context("The pre-build hook failed. Review the hook and try it manually.")?;
         // We need to reload in case the pre-build hook updates the file
         yard_yaml = load_yard_file(&validator, &yard_file_path)
             .await
@@ -504,10 +538,19 @@ async fn resolve_yard_yaml(
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
     for (name, path) in input_modules {
         if module_names_are_unique_check.contains(&name) {
-            bail!("A module with name '{}' is declared twice.", name);
+            return Err(user_error(format!(
+                "Module '{name}' is declared more than once. Give every input module a unique name."
+            )));
         }
         module_names_are_unique_check.insert(name.clone());
-        let module_data = read_module_file(&PathBuf::from(&path)).await?;
+        let module_data = read_module_file(&PathBuf::from(&path))
+            .await
+            .with_context(|| format!("Load local module '{name}' from '{path}'"))
+            .with_user_context(|| {
+                format!(
+                    "Could not load local module '{name}'. Check its path and file permissions."
+                )
+            })?;
         local_name_to_module_files_data.insert(
             name.clone(),
             ModuleFileData {
@@ -520,7 +563,9 @@ async fn resolve_yard_yaml(
     }
     for (name, path) in input_remotes.iter().flat_map(|e| e.name_to_path.iter()) {
         if module_names_are_unique_check.contains(name) {
-            eros::bail!("A module named '{}' is declared more than once", name)
+            return Err(user_error(format!(
+                "Module '{name}' is declared more than once. Give every input module a unique name."
+            )));
         }
     }
 
@@ -564,29 +609,30 @@ async fn resolve_yard_yaml(
                 }
                 UseModule::Input(declared_module) => {
                     if !seen_module_names.insert(declared_module.name.clone()) {
-                        bail!(
+                        return Err(user_error(format!(
                             "Module '{}' is declared more than once in the output '{}'. Each input module may only be declared once per output.",
-                            declared_module.name,
-                            container_file_name
-                        );
+                            declared_module.name, container_file_name
+                        )));
                     }
                     let module = modules.get(&declared_module.name).ok_or_else(|| {
-                        eros::error!(
-                            "Module '{}' is not declared as an input in the '{}' file.",
-                            declared_module.name,
-                            YARD_YAML_FILE_NAME
-                        )
+                        user_error(format!(
+                            "Module '{}' is used by an output but is not declared under `inputs` in {}.",
+                            declared_module.name, YARD_YAML_FILE_NAME
+                        ))
                     })?;
                     for requirement in &module.required_modules {
                         if !seen_module_paths.contains(&requirement.resolved) {
-                            bail!(
-                                "Module '{}' requires module '{}' (resolved to '{}') to be included before it in output '{}'.\n{}",
+                            return Err(user_error(format!(
+                                "Module '{}' requires module '{}' to be included before it in output '{}'.",
                                 declared_module.name,
                                 requirement.declared_path,
+                                container_file_name
+                            ))
+                            .context(format!(
+                                "Required module resolved to '{}' for {}",
                                 requirement.resolved.path.display(),
-                                container_file_name,
                                 module.source_info.source_location()
-                            );
+                            )));
                         }
                     }
                     let mut module = module.clone();
@@ -623,10 +669,16 @@ async fn retrieve_module_file_data(
 ) -> eros::Result<HashMap<String, ModuleFileData>> {
     let mut name_to_module_file_data: HashMap<String, ModuleFileData> = HashMap::new();
     for remote in remotes {
-        let git_provider = create_provider(remote.url, remote.commit)?;
+        let git_provider = create_provider(remote.url, remote.commit)
+            .user_context("A remote URL in yard.yaml is invalid. Use an HTTP(S) or SSH Git URL.")?;
         trace!("Identified provider '{:?}'", git_provider);
         let name_to_module_files_data_part =
-            git_provider.retrieve_module(remote.name_to_path).await?;
+            git_provider
+                .retrieve_module(remote.name_to_path)
+                .await
+                .user_context(
+                    "Could not retrieve remote modules. Check the repository URL, commit, network connection, and Git credentials.",
+                )?;
         name_to_module_file_data.extend(name_to_module_files_data_part);
     }
     Ok(name_to_module_file_data)
@@ -642,7 +694,11 @@ async fn resolve_additional_files(
         match module.source_info {
             SourceInfoKind::Local(ref local) => {
                 let local_file_path = local_download_path_root.join(&local.path);
-                validate_path_references(&[local_file_path])?;
+                validate_path_references(&[local_file_path]).with_user_context(|| {
+                    format!(
+                        "A required file for local module '{name}' is missing or has an invalid path."
+                    )
+                })?;
             }
             SourceInfoKind::Remote(ref remote) => {
                 let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
@@ -651,7 +707,7 @@ async fn resolve_additional_files(
                     if local_download_path.exists() && do_not_refetch {
                         println!(
                             "Note: '{}' is not refetched since it already exists and `--do-not-refetch` is set.",
-                            &local_download_path.display()
+                            local_download_path.display()
                         );
                         continue;
                     }
@@ -666,8 +722,13 @@ async fn resolve_additional_files(
                         .with_context(|| {
                             format!(
                                 "Could not download '{}' at\n{}",
-                                &file_path,
+                                file_path,
                                 remote.source_location()
+                            )
+                        })
+                        .with_user_context(|| {
+                            format!(
+                                "Could not download required file '{file_path}' for module '{name}'. Check the remote path and repository access."
                             )
                         })?;
                 }
@@ -684,10 +745,10 @@ fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> eros::Result<()> {
         let path = PathBuf::from(file);
         is_local_absolute(&path)?;
         if !path.exists() {
-            bail!(
-                "Path '{}' does not exist, but it should at this point.",
-                file.display()
-            );
+            return Err(user_error(
+                "A required path does not exist. Check the module's `required_files` entries.",
+            )
+            .context(format!("Required path '{}' does not exist", file.display())));
         }
     }
     Ok(())
@@ -696,10 +757,10 @@ fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> eros::Result<()> {
 /// No "~" or ".."
 fn is_local_absolute(path: &Path) -> eros::Result<()> {
     let error = || {
-        eros::error!(
-            "Path '{}' is not valid. Paths must be relative containing no '~' or '..' components.",
-            path.display()
+        user_error(
+            "A configured path is invalid. Paths must be relative and cannot contain `~` or `..` components.",
         )
+        .context(format!("Invalid configured path: '{}'", path.display()))
     };
     for component in path.components() {
         match component {
@@ -716,10 +777,10 @@ fn is_local_absolute(path: &Path) -> eros::Result<()> {
 /// yard directory or a remote repository, so they may not escape that root.
 fn normalize_module_path(path: &Path) -> eros::Result<PathBuf> {
     let error = || {
-        eros::error!(
-            "Module path '{}' is not valid. Module paths must be relative and stay within their source root.",
-            path.display()
+        user_error(
+            "A module path is invalid. Module paths must be relative and stay within their source root.",
         )
+        .context(format!("Invalid module path: '{}'", path.display()))
     };
     let mut normalized = PathBuf::new();
     for component in path.components() {
@@ -749,10 +810,10 @@ fn resolve_module_requirement(
         .expect("Only file-backed modules can declare requirements");
     let requirement_path = Path::new(&required_path);
     if requirement_path.is_absolute() {
-        bail!(
+        return Err(user_error(format!(
             "Required module path '{}' is not valid. Required module paths must be relative to the module file.",
             required_path
-        );
+        )));
     }
     let resolved_path = normalize_module_path(
         &source
@@ -770,7 +831,7 @@ fn resolve_module_requirement(
     })
 }
 
-#[eros::context("Could not resolve modules from the ")]
+#[eros::context("Could not validate and construct the referenced modules")]
 async fn validate_schema_and_create_module_builders(
     name_to_module_files_data: HashMap<String, ModuleFileData>,
 ) -> eros::Result<HashMap<String, ModuleBuilder>> {
@@ -796,12 +857,17 @@ async fn validate_schema_and_create_module_builders(
             for required_file1 in &module1.required_files {
                 for required_file2 in &module2.required_files {
                     if required_file1 == required_file2 {
-                        bail!(
-                            "Required file '{}' is declared in both modules:\n{}\n{}\nIf put in the same place one would override the other.",
+                        return Err(user_error(format!(
+                            "Required file '{}' is declared by both {} and {}. The modules would overwrite each other's file.",
                             required_file1,
+                            module1.source_info.user_label(),
+                            module2.source_info.user_label()
+                        ))
+                        .context(format!(
+                            "Conflicting sources:\n{}\n{}",
                             module1.source_info.source_location(),
                             module2.source_info.source_location()
-                        );
+                        )));
                     }
                 }
             }
@@ -828,10 +894,17 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             serde_yaml::Value::Null
         } else {
             serde_yaml::from_str(&module_files.config_data)
-                .with_context(|| "yard-module-schema.json is not valid json.")?
+                .context("Parse module configuration as YAML")
+                .user_context(
+                    "A module contains invalid YAML. Check the module's configuration block syntax and indentation.",
+                )?
         };
 
-        validate_module_schema_fn(&yard_module_yaml).context("Schema validation failed.")?;
+        validate_module_schema_fn(&yard_module_yaml)
+            .context("Module schema validation failed")
+            .user_context(
+                "A module configuration does not match the expected schema. Check its field names and value types.",
+            )?;
 
         let raw_module: YamlModule = serde_yaml::from_value(yard_module_yaml).context(
             "Was able to serialize yaml, but was unable to convert to internal expected model.",
@@ -865,10 +938,10 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             .chain(optional_template_values.iter())
         {
             if !tera_accepts_ident(template_value) {
-                bail!(
+                return Err(user_error(format!(
                     "Template variable '{}' is not a valid identifier for a module argument.",
                     template_value
-                );
+                )));
             }
         }
 
@@ -883,7 +956,13 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             independent,
         ))
     })()
-    .with_context(|| module_files.source_info.source_location())?;
+    .with_context(|| module_files.source_info.source_location())
+    .with_user_context(|| {
+        format!(
+            "Could not use {}. Check its configuration and contents.",
+            module_files.source_info.user_label()
+        )
+    })?;
 
     Ok(ModuleBuilder {
         containerfile_data: module_files.containerfile_data,
@@ -926,7 +1005,7 @@ fn validate_against_schema(
                 &error.schema_path()
             )
         })
-        .context("yaml does not follow the proper schema.")?;
+        .context("YAML does not follow the expected schema")?;
     Ok(())
 }
 
@@ -942,13 +1021,21 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
                 command,
                 e
             )
-        })?;
+        })
+        .user_context(
+            "A command used as a template value failed. Review the command in yard.yaml and try it manually.",
+        )?;
         return Ok(output.trim().to_string());
     }
     // env var
     if let Some(var) = val.strip_prefix("$") {
         let val = std::env::var(var)
-            .with_context(|| format!("Could not get env var '{}' for template value.", var))?;
+            .with_context(|| format!("Could not get environment variable '{var}'"))
+            .with_user_context(|| {
+                format!(
+                    "Environment variable '{var}' is required by yard.yaml but is not available."
+                )
+            })?;
         return Ok(val);
     }
     Ok(val)
@@ -985,7 +1072,10 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                     "Could not render template for Containerfile part found at:\n{}",
                     source_info.source_location(),
                 )
-            })?,
+            })
+            .user_context(
+                "Could not render a module template. Check its template syntax and supplied arguments.",
+            )?,
         };
         Ok(rendered.trim().to_string())
     }
@@ -1078,7 +1168,12 @@ pub struct ModuleData {
 
 #[eros::context("Could not read '{}' as a module.", &PathBuf::from(&path).display())]
 pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
-    let data = fs::read_to_string(path).await?;
+    let data = fs::read_to_string(path)
+        .await
+        .with_context(|| format!("Read module file '{}'", path.display()))
+        .user_context(
+            "Could not read a referenced module file. Check that it exists and is readable.",
+        )?;
     // Collect containerfile/dockerfile blocks in the order they appear. Independent modules use
     // two blocks: the first is the build stage, the second is the install stage.
     let mut container_data: Vec<String> = Vec::new();
@@ -1092,15 +1187,17 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
                 continue;
             }
             if capture_status != CapturingState::None {
-                eros::bail!("Found another config start line before finishing the previous one");
+                return Err(user_error(
+                    "A module starts a YAML block before closing the previous fenced block.",
+                ));
             }
             capture_status = CapturingState::Config;
             continue;
         } else if compare_line == "```containerfile" || compare_line == "```dockerfile" {
             if capture_status != CapturingState::None {
-                eros::bail!(
-                    "Found another Containerfile start line before finishing the previous one"
-                );
+                return Err(user_error(
+                    "A module starts a Containerfile block before closing the previous fenced block.",
+                ));
             }
             capture_status = CapturingState::Containerfile;
             continue;
@@ -1127,6 +1224,19 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             capture.push('\n');
         }
     }
+    match capture_status {
+        CapturingState::Containerfile => {
+            return Err(user_error(
+                "A module has an unclosed Containerfile fenced block. Add a closing ``` line.",
+            ));
+        }
+        CapturingState::Config => {
+            return Err(user_error(
+                "A module has an unclosed YAML fenced block. Add a closing ``` line.",
+            ));
+        }
+        CapturingState::None => {}
+    }
     Ok(match (container_data.is_empty(), config_data) {
         (true, None) => {
             // No sections found for either so interpret the entire file as a containerfile
@@ -1137,7 +1247,9 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
             }
         }
         (true, Some(_)) => {
-            eros::bail!("Found config in the module file, but no containerfile data")
+            return Err(user_error(
+                "A module has a YAML configuration block but no Containerfile block.",
+            ));
         }
         (false, None) => {
             // No config block. If there are two containerfile blocks, treat the second as the

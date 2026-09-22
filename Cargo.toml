@@ -13,7 +13,7 @@ name = "yard"
 path = "src/main.rs"
 
 [dependencies]
-eros = "0.8.0"
+eros = { version = "0.8.0", features = ["user_context"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
