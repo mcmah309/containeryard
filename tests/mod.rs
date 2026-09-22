@@ -1,9 +1,52 @@
-use std::fs;
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use predicates::prelude::{PredicateBooleanExt, predicate};
 
+const TEST_OUTPUT_FILE_NAME: &str = "output.test.Containerfile";
+
+struct TestOutputFile {
+    path: PathBuf,
+}
+
+impl TestOutputFile {
+    fn new(test_dir: &str) -> Self {
+        let output = Self {
+            path: Path::new(test_dir).join(TEST_OUTPUT_FILE_NAME),
+        };
+        output
+            .remove()
+            .unwrap_or_else(|error| panic!("failed to remove stale test output: {error}"));
+        output
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn remove(&self) -> io::Result<()> {
+        match fs::remove_file(&self.path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
+    }
+}
+
+impl Drop for TestOutputFile {
+    fn drop(&mut self) {
+        if let Err(error) = self.remove()
+            && !std::thread::panicking()
+        {
+            panic!("failed to clean up '{}': {error}", self.path.display());
+        }
+    }
+}
+
 #[test]
 fn conflicting_required_files() {
+    let _output = TestOutputFile::new("tests/conflicting_required_files");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/conflicting_required_files")
@@ -23,26 +66,27 @@ fn conflicting_required_files() {
 
 #[test]
 fn pure_containerfile() {
+    let output_file = TestOutputFile::new("tests/pure_containerfile");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/pure_containerfile")
         .arg("build")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/pure_containerfile/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
     assert!(output.contains("# Empty"));
 }
 
 #[test]
 fn module_file_no_config() {
+    let output_file = TestOutputFile::new("tests/module_file_no_config");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/module_file_no_config")
         .arg("build")
         .assert();
     assert.success();
-    let output =
-        fs::read_to_string("tests/module_file_no_config/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
     assert!(output.contains("# Empty"));
 }
 
@@ -60,13 +104,14 @@ fn output_order() {
 
 #[test]
 fn independent_modules() {
+    let output_file = TestOutputFile::new("tests/independent_modules");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/independent_modules")
         .arg("build")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/independent_modules/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
 
     // The build stage must be hoisted to the start of the generated Containerfile.
     let build_stage_idx = output
@@ -109,13 +154,14 @@ fn independent_modules() {
         .arg("--with-cache-busting")
         .assert();
     assert.success();
-    let output = fs::read_to_string("tests/independent_modules/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
     // Cache busting ARGs are injected before both the build and install stages.
     assert!(output.contains("ARG CACHE_BUST_PYTHON_DEPS=1"));
 }
 
 #[test]
 fn duplicate_module_rejected() {
+    let _output = TestOutputFile::new("tests/duplicate_module");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/duplicate_module")
@@ -138,6 +184,7 @@ fn duplicate_module_rejected() {
 
 #[test]
 fn module_requires_accepts_dependency_in_an_earlier_position() {
+    let output_file = TestOutputFile::new("tests/module_requires_success");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/module_requires_success")
@@ -145,8 +192,7 @@ fn module_requires_accepts_dependency_in_an_earlier_position() {
         .assert()
         .success();
 
-    let output =
-        fs::read_to_string("tests/module_requires_success/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
     let base_idx = output.find("RUN echo base").unwrap();
     let consumer_idx = output.find("RUN echo consumer").unwrap();
     assert!(base_idx < consumer_idx);
@@ -154,6 +200,7 @@ fn module_requires_accepts_dependency_in_an_earlier_position() {
 
 #[test]
 fn module_requires_rejects_dependency_in_a_later_position() {
+    let _output = TestOutputFile::new("tests/module_requires_wrong_order");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/module_requires_wrong_order")
@@ -169,6 +216,7 @@ fn module_requires_rejects_dependency_in_a_later_position() {
 
 #[test]
 fn module_requires_rejects_dependency_missing_from_output() {
+    let _output = TestOutputFile::new("tests/module_requires_missing");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/module_requires_missing")
@@ -184,6 +232,7 @@ fn module_requires_rejects_dependency_missing_from_output() {
 
 #[test]
 fn boolean_and_number_args() {
+    let output_file = TestOutputFile::new("tests/boolean_args");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/boolean_args")
@@ -191,7 +240,7 @@ fn boolean_and_number_args() {
         .assert()
         .success();
 
-    let output = std::fs::read_to_string("tests/boolean_args/output.test.Containerfile").unwrap();
+    let output = fs::read_to_string(output_file.path()).unwrap();
     assert!(output.contains("RUN echo true false unchanged"));
     assert!(output.contains("RUN echo 4 -2 2"));
     assert!(output.contains("RUN echo enabled"));
