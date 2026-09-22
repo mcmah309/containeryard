@@ -403,18 +403,18 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "eros"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e79deb5442d1c7c12fd74ceddad5c63c30f736e079fe8b32def54c8a34de7f58"
+checksum = "38b84a2735c1c6e64a0868674414310ae8512b3a3753db939276ec76f8963330"
 dependencies = [
  "eros-macros",
 ]
 
 [[package]]
 name = "eros-macros"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bf122f9900df1627ba3570e1b2d078f7fc608ddfe2336c9eb49eaf31d51a77b"
+checksum = "c4718b3c2ca79309aea9dc5206951e8a471086455236fb56179a84676d7e060a"
 dependencies = [
  "proc-macro2",
  "quote",
