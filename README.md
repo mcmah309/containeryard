@@ -52,6 +52,26 @@ hooks:
 Simply running `yard build` in the above case, will output a single Containerfile to your current directory.
 See more `yard.yaml` examples [here](https://github.com/mcmah309/containeryard/tree/master/examples).
 
+### Reusing Outputs
+
+An output can include another output by referencing its exact name with the same syntax used for an input module. ContainerYard expands the referenced output's module declarations at that position before validating modules or rendering either Containerfile:
+
+```yaml
+outputs:
+  rust.Containerfile:
+    - ubuntu:
+        version: "24.04"
+    - rustup:
+    - rust-essentials:
+
+  rust-c.Containerfile:
+    - rust.Containerfile:
+    - clang:
+    - sccache:
+```
+
+In this example, `rust-c.Containerfile` contains the modules from `rust.Containerfile` followed by `clang` and `sccache`. Because expansion happens before `requires` validation, requirements can be satisfied by modules in the referenced output.
+
 ## Module Files
 
 Modules represent specific features of a container. e.g. The [rust module](https://github.com/mcmah309/yard_module_repository/blob/59e4aa77ee7e1c40adba40a7ab10e6b4fb9b8420/dependent/apt/rust/nightly.md) defines rust's installation. 

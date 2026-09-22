@@ -1,0 +1,9 @@
+inputs:
+  modules:
+    unused: module.md
+
+outputs:
+  first.test.Containerfile:
+    - second.test.Containerfile:
+  second.test.Containerfile:
+    - first.test.Containerfile:

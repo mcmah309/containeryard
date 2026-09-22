@@ -182,6 +182,7 @@ pub struct RemoteModules {
 enum UseModule {
     Inline(UseInlineModule),
     Input(UseInputModule),
+    Output(String),
 }
 
 /// Inline module
@@ -493,6 +494,16 @@ async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)
         }
     }
     let input_modules = yard_yaml.inputs.modules.unwrap_or_default();
+    let input_names: HashSet<String> = input_modules
+        .keys()
+        .chain(
+            input_remotes
+                .iter()
+                .flat_map(|remote| remote.name_to_path.keys()),
+        )
+        .cloned()
+        .collect();
+    let output_names: HashSet<String> = yard_yaml.outputs.keys().cloned().collect();
     let mut output_container_files: IndexMap<String, Vec<UseModule>> = IndexMap::new();
     for (containerfile_name, output) in yard_yaml.outputs {
         let mut modules: Vec<UseModule> = Vec::new();
@@ -507,6 +518,17 @@ async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)
                         "Internal model is wrong. This should be `- module_name: ...`"
                     );
                     for (module_name, template_vars) in module_ref {
+                        if output_names.contains(&module_name)
+                            && !input_names.contains(&module_name)
+                        {
+                            if template_vars.is_some() {
+                                return Err(user_error(format!(
+                                    "Output reference '{module_name}' cannot have arguments. Declare it as `- {module_name}:`."
+                                )));
+                            }
+                            modules.push(UseModule::Output(module_name));
+                            continue;
+                        }
                         modules.push(UseModule::Input(UseInputModule {
                             name: module_name,
                             template_vars: template_vars.unwrap_or_default(),
@@ -528,6 +550,63 @@ async fn parse_yard_yaml(path: &Path) -> eros::Result<(YardFile, Option<String>)
     ))
 }
 
+/// Expand output references into their module declarations before resolving modules. A reference
+/// uses module-style syntax and has a name that exactly matches another output.
+fn expand_output_references(
+    outputs: IndexMap<String, Vec<UseModule>>,
+) -> eros::Result<IndexMap<String, Vec<UseModule>>> {
+    fn expand(
+        output_name: &str,
+        outputs: &IndexMap<String, Vec<UseModule>>,
+        expanded: &mut HashMap<String, Vec<UseModule>>,
+        visiting: &mut Vec<String>,
+    ) -> eros::Result<Vec<UseModule>> {
+        if let Some(modules) = expanded.get(output_name) {
+            return Ok(modules.clone());
+        }
+
+        if let Some(cycle_start) = visiting.iter().position(|name| name == output_name) {
+            let mut cycle = visiting[cycle_start..].to_vec();
+            cycle.push(output_name.to_owned());
+            return Err(user_error(format!(
+                "Output reference cycle detected: {}. Remove one of the references in the cycle.",
+                cycle
+                    .iter()
+                    .map(|name| format!("'{name}'"))
+                    .collect::<Vec<_>>()
+                    .join(" -> ")
+            )));
+        }
+
+        let declarations = outputs
+            .get(output_name)
+            .expect("Output references are created only for known output names");
+        visiting.push(output_name.to_owned());
+
+        let mut modules = Vec::new();
+        for declaration in declarations {
+            match declaration {
+                UseModule::Output(referenced_output) => {
+                    modules.extend(expand(referenced_output, outputs, expanded, visiting)?)
+                }
+                declaration => modules.push(declaration.clone()),
+            }
+        }
+
+        visiting.pop();
+        expanded.insert(output_name.to_owned(), modules.clone());
+        Ok(modules)
+    }
+
+    let mut cache = HashMap::new();
+    let mut expanded_outputs = IndexMap::new();
+    for output_name in outputs.keys() {
+        let modules = expand(output_name, &outputs, &mut cache, &mut Vec::new())?;
+        expanded_outputs.insert(output_name.clone(), modules);
+    }
+    Ok(expanded_outputs)
+}
+
 /// resolve and validate fields in the yard.yaml file
 #[eros::context(
     "Could not resolve all the fields in the parsed '{}' file",
@@ -545,6 +624,7 @@ async fn resolve_yard_yaml(
         input_modules,
         output_container_files,
     } = yard_yaml;
+    let output_container_files = expand_output_references(output_container_files)?;
     assert!(!output_container_files.is_empty(), "Ouputs should exist");
     let mut local_name_to_module_files_data: HashMap<String, ModuleFileData> = HashMap::new();
     let mut module_names_are_unique_check: HashSet<String> = HashSet::new();
@@ -667,6 +747,9 @@ async fn resolve_yard_yaml(
                         .expect("Input modules always have a module identity");
                     modules_for_container_file.push(module.build()?);
                     seen_module_paths.insert(module_identity);
+                }
+                UseModule::Output(_) => {
+                    unreachable!("Output references should have been expanded")
                 }
             }
         }

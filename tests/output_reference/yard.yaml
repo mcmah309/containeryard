@@ -1,0 +1,13 @@
+inputs:
+  modules:
+    foundation: modules/base.md
+    consumer: modules/nested/consumer.md
+
+outputs:
+  base.test.Containerfile:
+    - foundation:
+  derived.test.Containerfile:
+    - base.test.Containerfile:
+    - consumer:
+  scalar.test.Containerfile:
+    - base.test.Containerfile

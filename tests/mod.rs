@@ -13,8 +13,12 @@ struct TestOutputFile {
 
 impl TestOutputFile {
     fn new(test_dir: &str) -> Self {
+        Self::named(test_dir, TEST_OUTPUT_FILE_NAME)
+    }
+
+    fn named(test_dir: &str, file_name: &str) -> Self {
         let output = Self {
-            path: Path::new(test_dir).join(TEST_OUTPUT_FILE_NAME),
+            path: Path::new(test_dir).join(file_name),
         };
         output
             .remove()
@@ -100,6 +104,49 @@ fn output_order() {
     assert.success().stdout(predicate::eq(
         "base.test.Containerfile\napp.test.Containerfile\nfinal.test.Containerfile\n",
     ));
+}
+
+#[test]
+fn output_reference_inlines_modules_before_requires_validation() {
+    let base_output = TestOutputFile::named("tests/output_reference", "base.test.Containerfile");
+    let derived_output =
+        TestOutputFile::named("tests/output_reference", "derived.test.Containerfile");
+    let scalar_output =
+        TestOutputFile::named("tests/output_reference", "scalar.test.Containerfile");
+
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/output_reference")
+        .arg("build")
+        .assert()
+        .success();
+
+    let base = fs::read_to_string(base_output.path()).unwrap();
+    assert!(base.contains("RUN echo base"));
+    assert!(!base.contains("RUN echo consumer"));
+
+    let derived = fs::read_to_string(derived_output.path()).unwrap();
+    let base_idx = derived.find("RUN echo base").unwrap();
+    let consumer_idx = derived.find("RUN echo consumer").unwrap();
+    assert!(base_idx < consumer_idx);
+    assert!(!derived.contains("base.test.Containerfile"));
+
+    let scalar = fs::read_to_string(scalar_output.path()).unwrap();
+    assert!(scalar.contains("base.test.Containerfile"));
+    assert!(!scalar.contains("RUN echo base"));
+}
+
+#[test]
+fn output_reference_cycles_are_rejected() {
+    assert_cmd::Command::cargo_bin("yard")
+        .unwrap()
+        .current_dir("tests/output_reference_cycle")
+        .arg("build")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Output reference cycle detected: 'first.test.Containerfile' -> 'second.test.Containerfile' -> 'first.test.Containerfile'",
+        ));
 }
 
 #[test]
