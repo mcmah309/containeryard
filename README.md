@@ -266,11 +266,23 @@ Note: `yard` is the cli tool for ContainerYard.
 
 ### Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
 
+Copy and paste the following to install the latest GitHub release. It automatically
+selects the `.deb` for your architecture (`amd64` or `arm64`):
+
 ```bash
-release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.4.0'
-deb_file="containeryard_$(echo $release_ver | sed 's/^v//')-1_amd64.deb"
-curl -LO https://github.com/mcmah309/containeryard/releases/download/$release_ver/$deb_file
-dpkg -i "$deb_file"
+(
+set -e
+sudo apt-get update
+sudo apt-get install -y curl
+release_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/mcmah309/containeryard/releases/latest)
+tag=${release_url##*/}
+deb="containeryard_${tag#v}-1_$(dpkg --print-architecture).deb"
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT
+curl -fL "https://github.com/mcmah309/containeryard/releases/download/$tag/$deb" -o "$tmp_dir/$deb"
+sudo apt-get install -y "$tmp_dir/$deb"
+yard --version
+)
 ```
 
 ### Cargo

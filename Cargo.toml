@@ -41,11 +41,12 @@ codegen-units = 1
 
 [package.metadata.deb]
 maintainer = "Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
-copyright = "2024, Dillon Henry McMahon <dillonmcmahon79@gmail.com>"
+license-file = ["LICENSE", "0"]
 extended-description = """Container Yard is a declarative, reproducible, and reusable decentralized approach for defining containers."""
 depends = "$auto"
-section = "utility"
+section = "devel"
 priority = "optional"
 assets = [
- ["target/release/yard", "usr/bin/", "755"],
+ ["target/release/yard", "usr/bin/yard", "755"],
+ ["README.md", "usr/share/doc/containeryard/README.md", "644"],
 ]

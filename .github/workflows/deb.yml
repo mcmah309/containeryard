@@ -1,0 +1,98 @@
+name: Debian packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and install (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "containeryard") | .version')
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "::error::Release tag $RELEASE_TAG must match Cargo.toml version v$version"
+            exit 1
+          fi
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils dpkg-dev
+          cargo install cargo-deb --version 3.8.0 --locked
+      - name: Build Debian package
+        run: cargo deb --locked
+      - name: Verify package and installation
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          packages=(target/debian/*.deb)
+          test "${#packages[@]}" -eq 1
+          package="${packages[0]}"
+          test "$(dpkg-deb --field "$package" Package)" = containeryard
+          test "$(dpkg-deb --field "$package" Architecture)" = "$EXPECTED_ARCH"
+          dpkg-deb --info "$package"
+          sudo apt-get install -y "./$package"
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "containeryard") | .version')
+          test "$(/usr/bin/yard --version)" = "yard $version"
+          /usr/bin/yard --help
+          sudo apt-get remove -y containeryard
+          test ! -e /usr/bin/yard
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v7
+        with:
+          name: containeryard-deb-${{ matrix.arch }}
+          path: target/debian/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish packages to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Debian packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: containeryard-deb-*
+          merge-multiple: true
+          path: packages
+      - name: Create release or upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" packages/*.deb --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            flags=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" packages/*.deb --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes "${flags[@]}"
+          fi
