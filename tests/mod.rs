@@ -195,6 +195,11 @@ fn named_fragments_preserve_placement_and_cache_busting() {
     assert.success();
     let output = fs::read_to_string(output_file.path()).unwrap();
 
+    // Cache busting is enabled by default for every named and inline fragment.
+    assert_eq!(output.matches("ARG CACHE_BUST_PYTHON_DEPS=1").count(), 3);
+    assert_eq!(output.matches("ARG CACHE_BUST_TWO_FRAGMENT=1").count(), 2);
+    assert!(output.contains("ARG CACHE_BUST_INLINE_0=1"));
+
     // The build fragment must be hoisted to the start of the generated Containerfile.
     let build_fragment_idx = output
         .find("FROM python:3.11-slim AS builder")
@@ -248,12 +253,11 @@ fn named_fragments_preserve_placement_and_cache_busting() {
         .unwrap()
         .current_dir("tests/split_modules")
         .arg("build")
-        .arg("--with-cache-busting")
+        .arg("--no-cache-busting")
         .assert();
     assert.success();
     let output = fs::read_to_string(output_file.path()).unwrap();
-    // Cache busting ARGs are injected before all three fragments.
-    assert_eq!(output.matches("ARG CACHE_BUST_PYTHON_DEPS=1").count(), 3);
+    assert!(!output.contains("ARG CACHE_BUST_"));
 }
 
 #[test]

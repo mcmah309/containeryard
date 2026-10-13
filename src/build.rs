@@ -25,7 +25,7 @@ pub const YARD_YAML_FILE_NAME: &str = "yard.yaml";
 pub async fn build(
     path: &Path,
     do_not_refetch: bool,
-    with_cache_busting: bool,
+    cache_busting: bool,
     ignore_requires: Vec<String>,
     ignore_all_requires: bool,
 ) -> eros::Result<()> {
@@ -44,7 +44,7 @@ pub async fn build(
             "No modules were resolved. Add at least one module to an output in yard.yaml.",
         ));
     }
-    let outputs = apply_templating(resolved_yard_file, with_cache_busting)?;
+    let outputs = apply_templating(resolved_yard_file, cache_busting)?;
     if outputs.is_empty() {
         return Err(user_error(
             "No Containerfiles were created. Add at least one entry under `outputs` in yard.yaml.",
@@ -1282,7 +1282,7 @@ fn resolve_template_value(val: String) -> eros::Result<String> {
 type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
-fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Result<Outputs> {
+fn apply_templating(yard: Containerfiles, cache_busting: bool) -> eros::Result<Outputs> {
     /// Renders a single template with the provided values, attaching source info on error.
     fn render(
         template: &str,
@@ -1334,7 +1334,7 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                     &included_module.source_info,
                     &mut directives,
                 )?;
-                if with_cache_busting {
+                if cache_busting {
                     let module_name = included_module
                         .name
                         .as_deref()

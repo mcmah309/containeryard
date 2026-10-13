@@ -114,11 +114,7 @@ fn each_fragment_works_independently() {
         let project = Project::single(&format!(
             "```containerfile name={name}\nFROM busybox\nRUN echo {name}\n```\n"
         ));
-        project
-            .command()
-            .arg("--with-cache-busting")
-            .assert()
-            .success();
+        project.command().assert().success();
         let output = project.output();
         assert!(output.contains(&format!("({name} fragment)")));
         assert_eq!(output.matches("ARG CACHE_BUST_MODULE=1").count(), 1);

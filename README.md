@@ -202,7 +202,7 @@ outputs:
 
 ### Putting It All Together
 
-Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build` would be
+Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build --no-cache-busting` would be
 ```dockerfile
 FROM alpine:3.20.0
 
@@ -261,7 +261,7 @@ outputs:
     - RUN echo after
 ```
 
-The generated instructions are:
+With `yard build --no-cache-busting`, the generated instructions are:
 
 ```dockerfile
 FROM python:3.11-slim AS python-deps-builder
@@ -345,7 +345,7 @@ done
 
 ### Cache Busting
 
-`yard build --with-cache-busting` transforms the generated Containerfile so that a cache-busting argument is inserted before each module fragment:
+`yard build` inserts a cache-busting argument before each module fragment by default:
 
 ```dockerfile
 ARG CACHE_BUST_<MODULE_NAME>=1
@@ -358,6 +358,8 @@ podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
 ```
 
 Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
+
+Use `yard build --no-cache-busting` to omit these arguments.
 
 ### Embedded Scripts
 

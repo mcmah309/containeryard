@@ -262,11 +262,7 @@ RUN {{ script(name="setup", template=true) }}
         &[("split", split), ("regular", regular)],
         "  output.test.Containerfile:\n    - regular:\n    - split: {message: first}\n  second.test.Containerfile:\n    - regular:\n    - split: {message: second}\n",
     );
-    project
-        .command()
-        .arg("--with-cache-busting")
-        .assert()
-        .success();
+    project.command().assert().success();
     let first = project.output("output.test.Containerfile");
     let second = project.output("second.test.Containerfile");
     assert_eq!(execute_scripts(&first), "first\nother\nfirst\nfirst\n");
@@ -412,11 +408,7 @@ fn parser_directives_are_hoisted_deduplicated_and_preserved_with_cache_busting()
         &[("first", first), ("second", second)],
         "  output.test.Containerfile:\n    - first:\n    - second:\n",
     );
-    project
-        .command()
-        .arg("--with-cache-busting")
-        .assert()
-        .success();
+    project.command().assert().success();
     let output = project.output("output.test.Containerfile");
     assert!(
         output.starts_with("# syntax=docker/dockerfile:1.7\n# escape=\\\n# check=error=true\n\n")
