@@ -380,10 +380,9 @@ RUN {{ script(name="install") }}
 
 This generates a quoted heredoc with a collision-free delimiter, executed during the image build by the fence's interpreter. The interpreter must be installed in the image. Script bodies are literal by default, preserving shell syntax and Tera-like text.
 
-- `template=true` renders the script with declared module arguments. Use `{{ version | shell_quote }}` for a string used as one shell argument, without surrounding quotes. Values are rendered once; recursive `script()` calls are unsupported.
-- `dedent=true` removes common indentation before templating. By default, only fence indentation is removed; relative indentation, blank lines, trailing spaces, and backslashes are preserved. CRLF is normalized to LF.
+`template=true` renders the script with declared module arguments using expressions such as `{{ version }}`. Values are rendered once; recursive `script()` calls are unsupported.
 
-Options can be combined. `RUN` flags go before the helper, with no other commands before or after it:
+`RUN` flags go before the helper, with no other commands before or after it:
 
 ```dockerfile
 RUN --mount=type=cache,target=/var/cache/apt {{ script(name="install") }}

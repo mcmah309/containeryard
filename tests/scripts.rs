@@ -134,32 +134,26 @@ fn scripts_strip_fence_indentation_and_normalize_crlf() {
 }
 
 #[test]
-fn dedent_is_explicit_and_preserves_relative_and_trailing_whitespace() {
+fn scripts_preserve_body_indentation_and_trailing_whitespace() {
     let project = Project::single(
         r#"```sh name=setup
     cat <<'DATA'
       preserved spaces  
-    DATA
+DATA
 ```
 ```containerfile name=main
 FROM busybox
-RUN {{ script(name="setup", dedent=true) }}
 RUN {{ script(name="setup") }}
 ```
 "#,
     );
     let output = project.build();
-    assert!(output.contains("sh\ncat <<'DATA'\n  preserved spaces  \nDATA\nYARD_SCRIPT_0"));
-    assert!(
-        output.contains("sh\n    cat <<'DATA'\n      preserved spaces  \n    DATA\nYARD_SCRIPT_0")
-    );
-    let first = output.split("RUN <<'").nth(1).unwrap();
-    let first = format!("RUN <<'{}", first.split("RUN <<'").next().unwrap());
-    assert_eq!(execute_scripts(&first), "  preserved spaces  \n");
+    assert!(output.contains("sh\n    cat <<'DATA'\n      preserved spaces  \nDATA\nYARD_SCRIPT_0"));
+    assert_eq!(execute_scripts(&output), "      preserved spaces  \n");
 }
 
 #[test]
-fn templated_scripts_quote_arguments_and_do_not_render_values_twice() {
+fn templated_scripts_preserve_values_and_do_not_render_them_twice() {
     let value =
         "space 'quote' \"$HOME\" $(printf injected) \\ <>& {{ untouched }}\nYARD_SCRIPT_0\nlast";
     let module = r#"```yaml name=config
@@ -168,7 +162,9 @@ args:
 ```
 ```bash name=setup
 set -euo pipefail
-printf '%s\n' {{ message | shell_quote }}
+cat <<'MESSAGE'
+{{ message }}
+MESSAGE
 ```
 ```containerfile name=main
 FROM debian
@@ -244,7 +240,7 @@ args:
   required: [message]
 ```
 ```sh name=setup
-printf '%s\n' {{ message | shell_quote }}
+printf '%s\n' "{{ message }}"
 ```
 ```containerfile name=build
 FROM busybox AS builder
@@ -350,6 +346,10 @@ fn invalid_script_calls_and_positions_are_rejected() {
         ),
         (
             "RUN {{ script(name=\"setup\", unknown=true) }}",
+            "script() requires a string `name`",
+        ),
+        (
+            "RUN {{ script(name=\"setup\", dedent=true) }}",
             "script() requires a string `name`",
         ),
         ("{{ script(name=\"setup\") }}", "Place script() after `RUN`"),

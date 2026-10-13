@@ -21,8 +21,6 @@ struct ScriptArgs {
     name: String,
     #[serde(default)]
     template: bool,
-    #[serde(default)]
-    dedent: bool,
 }
 
 struct Expansion {
@@ -30,39 +28,10 @@ struct Expansion {
     heredoc: String,
 }
 
-fn shell_quote(value: &str, _: Kwargs, _: &State) -> tera::TeraResult<String> {
-    if value.contains('\0') {
-        return Err(tera::Error::message(
-            "Shell arguments cannot contain NUL bytes.",
-        ));
-    }
-    Ok(format!("'{}'", value.replace('\'', "'\"'\"'")))
-}
-
 fn script_tera() -> Tera {
     let mut tera = Tera::default();
     tera.autoescape_on(Vec::<&str>::new());
-    tera.register_filter("shell_quote", shell_quote);
     tera
-}
-
-fn dedent(body: &str) -> String {
-    let prefix = body
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| &line[..line.len() - line.trim_start_matches([' ', '\t']).len()])
-        .reduce(|left, right| {
-            let common = left
-                .bytes()
-                .zip(right.bytes())
-                .take_while(|(a, b)| a == b)
-                .count();
-            &left[..common]
-        })
-        .unwrap_or_default();
-    body.split_inclusive('\n')
-        .map(|line| line.strip_prefix(prefix).unwrap_or(line))
-        .collect()
 }
 
 fn prepare_script(
@@ -71,17 +40,13 @@ fn prepare_script(
     context: &tera::Context,
 ) -> eros::Result<String> {
     let args: ScriptArgs = kwargs.deserialize().map_err(|error| {
-        user_error("script() requires a string `name` and accepts optional boolean `template` and `dedent` arguments.")
+        user_error("script() requires a string `name` and accepts an optional boolean `template` argument.")
             .context(error.to_string())
     })?;
     let script = scripts.get(&args.name).ok_or_else(|| user_error(format!(
         "Script '{}' was not found in this module. Declare a named `bash` or `sh` fenced block.", args.name
     )))?;
-    let mut body = if args.dedent {
-        dedent(&script.body)
-    } else {
-        script.body.clone()
-    };
+    let mut body = script.body.clone();
     if args.template {
         body = script_tera()
             .render_str(&body, context, false)
