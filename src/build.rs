@@ -92,8 +92,9 @@ pub struct YamlModule {
     /// Module files that must be included earlier in each output that uses this module. Paths are
     /// relative to this module file.
     pub requires: Option<Vec<YamlModuleRequirement>>,
-    /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
-    pub required_files: Option<Vec<String>>,
+    /// Files to pull in with the module. Paths are relative to the yard directory and cannot
+    /// contain `~` or `..` components.
+    pub files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
@@ -217,7 +218,7 @@ struct ModuleBuilder {
     /// Whether this module is split across output positions.
     split: bool,
     required_modules: Vec<ModuleRequirement>,
-    required_files: Vec<String>,
+    files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
     provided_template_values: HashMap<String, TemplateValue>,
@@ -339,7 +340,7 @@ impl ModuleBuilder {
             }
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
-        validate_path_references(&self.required_files)?;
+        validate_path_references(&self.files)?;
         if self.split && self.install_fragment_data.is_none() {
             return Err(user_error(format!(
                 "{} is marked as split (`split: true`) but has no install fragment. Split modules require at least two Containerfile blocks: a build fragment followed by an install fragment.",
@@ -772,7 +773,7 @@ async fn resolve_yard_yaml(
                             finalize_fragment_data: None,
                             split: false,
                             required_modules: Vec::new(),
-                            required_files: Vec::new(),
+                            files: Vec::new(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
                             provided_template_values: HashMap::new(),
@@ -883,7 +884,7 @@ async fn retrieve_module_file_data(
     Ok(name_to_module_file_data)
 }
 
-#[eros::context("Could not resolve additional required files")]
+#[eros::context("Could not resolve module files")]
 async fn resolve_additional_files(
     name_to_module: &HashMap<String, ModuleBuilder>,
     local_download_path_root: &Path,
@@ -894,14 +895,12 @@ async fn resolve_additional_files(
             SourceInfoKind::Local(ref local) => {
                 let local_file_path = local_download_path_root.join(&local.path);
                 validate_path_references(&[local_file_path]).with_user_context(|| {
-                    format!(
-                        "A required file for local module '{name}' is missing or has an invalid path."
-                    )
+                    format!("The file for local module '{name}' is missing or has an invalid path.")
                 })?;
             }
             SourceInfoKind::Remote(ref remote) => {
                 let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
-                for file_path in module.required_files.iter() {
+                for file_path in module.files.iter() {
                     let local_download_path = local_download_path_root.join(file_path);
                     if local_download_path.exists() && do_not_refetch {
                         println!(
@@ -927,7 +926,7 @@ async fn resolve_additional_files(
                         })
                         .with_user_context(|| {
                             format!(
-                                "Could not download required file '{file_path}' for module '{name}'. Check the remote path and repository access."
+                                "Could not download file '{file_path}' for module '{name}'. Check the remote path and repository access."
                             )
                         })?;
                 }
@@ -945,9 +944,12 @@ fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> eros::Result<()> {
         is_local_absolute(&path)?;
         if !path.exists() {
             return Err(user_error(
-                "A required path does not exist. Check the module's `required_files` entries.",
+                "A configured path does not exist. Check the module path and its `files` entries.",
             )
-            .context(format!("Required path '{}' does not exist", file.display())));
+            .context(format!(
+                "Configured path '{}' does not exist",
+                file.display()
+            )));
         }
     }
     Ok(())
@@ -1061,12 +1063,12 @@ async fn validate_schema_and_create_module_builders(
 
     for (index, (name1, module1)) in modules.iter().enumerate() {
         for (name1, module2) in modules.iter().skip(index + 1) {
-            for required_file1 in &module1.required_files {
-                for required_file2 in &module2.required_files {
-                    if required_file1 == required_file2 {
+            for file1 in &module1.files {
+                for file2 in &module2.files {
+                    if file1 == file2 {
                         return Err(user_error(format!(
-                            "Required file '{}' is declared by both {} and {}. The modules would overwrite each other's file.",
-                            required_file1,
+                            "File '{}' is declared by both {} and {}. The modules would overwrite each other's file.",
+                            file1,
                             module1.source_info.user_label(),
                             module2.source_info.user_label()
                         ))
@@ -1091,7 +1093,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
 ) -> eros::Result<ModuleBuilder> {
     let (
         required_modules,
-        required_files,
+        files,
         required_template_values,
         optional_template_values,
         split,
@@ -1126,11 +1128,11 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             args,
             split,
             requires,
-            required_files,
+            files,
             ..
         } = raw_module;
         let args = args.unwrap_or_default();
-        let required_files = required_files.unwrap_or_default();
+        let files = files.unwrap_or_default();
         let required_template_values: HashSet<String> =
             args.required.unwrap_or_default().into_iter().collect();
         let optional_template_values: HashSet<String> =
@@ -1160,12 +1162,12 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             })
             .collect::<eros::Result<Vec<_>>>()?;
 
-        for required_file in required_files.iter() {
-            is_local_absolute(&PathBuf::from(required_file))?;
+        for file in &files {
+            is_local_absolute(&PathBuf::from(file))?;
         }
         Ok((
             required_modules,
-            required_files,
+            files,
             required_template_values,
             optional_template_values,
             split,
@@ -1185,7 +1187,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         finalize_fragment_data: module_files.finalize_fragment_data,
         split,
         required_modules,
-        required_files,
+        files,
         required_template_values,
         optional_template_values,
         provided_template_values: HashMap::new(),

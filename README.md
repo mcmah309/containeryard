@@ -147,7 +147,7 @@ args:
 requires:
   - path: ../base/alpine.md
 # Files to be pulled in with this module
-required_files:
+files:
   - file/path
 # Split this module across build, install, and optional finalize fragments
 split: true

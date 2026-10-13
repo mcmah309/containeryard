@@ -89,18 +89,18 @@ pub trait GitProvider {
             .await?;
         let parent = local_download_path
             .parent()
-            .ok_or_else(|| user_error("A required file has an invalid local destination path."))?;
+            .ok_or_else(|| user_error("A module file has an invalid local destination path."))?;
         fs::create_dir_all(parent)
             .await
             .with_context(|| format!("Create directory '{}'", parent.display()))
             .user_context(
-                "Could not create a directory for a required file. Check destination permissions.",
+                "Could not create a directory for a module file. Check destination permissions.",
             )?;
         fs::write(local_download_path, file_data)
             .await
-            .with_context(|| format!("Write required file to '{}'", local_download_path.display()))
+            .with_context(|| format!("Write module file to '{}'", local_download_path.display()))
             .user_context(
-                "Could not save a required file. Check available disk space and destination permissions.",
+                "Could not save a module file. Check available disk space and destination permissions.",
             )?;
         Ok(())
     }

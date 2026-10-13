@@ -49,14 +49,16 @@ impl Drop for TestOutputFile {
 }
 
 #[test]
-fn conflicting_required_files() {
+fn conflicting_files() {
     let _output = TestOutputFile::new("tests/conflicting_required_files");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/conflicting_required_files")
         .arg("build")
         .assert();
-    assert.failure();
+    assert.failure().stderr(predicate::str::contains(
+        "File 'conflicting_file' is declared by both",
+    ));
 
     // check the only file that exists is yard.yaml
     for entry in std::fs::read_dir("tests/conflicting_required_files").unwrap() {

@@ -68,12 +68,12 @@
           },
           "description": "Modules that must be included earlier in any output using this module. Every entry requires path, resolved relative to this module file. An optional when expression makes a requirement conditional."
         },
-        "required_files": {
+        "files": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "List of required files for the module. Must be absolution paths from the current directory without a starting \"/\"."
+          "description": "Files to pull in with the module. Paths are relative to the yard directory and cannot contain ~ or .. components. Remote files are fetched relative to the module file in its repository."
         }
       },
       "required": [],
