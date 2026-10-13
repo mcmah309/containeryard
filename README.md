@@ -33,7 +33,7 @@ inputs:
         bash_flavor: dependent/apt/bash_interactive/flavors/mcmah309/mcmah309.md
 ```
 
-The keys such as `base` and `git_config` are project-local names; the paths identify the module files at their source.
+The keys such as `base` and `git_config` are short names used for the modules in the current file; the paths identify the module files at their source.
 
 ### 2. Compose Outputs
 
