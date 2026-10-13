@@ -3,7 +3,7 @@
 
 description: "This is a modules description for Two"
 files:
-  - conflicting_file
+  - path: conflicting_file
 ```
 ```containerfile name=main
 # Empty

@@ -143,7 +143,7 @@ requires:
   - path: ../base/alpine.md
 # Files to be pulled in with this module
 files:
-  - file/path
+  - path: file/path
 ```
 All of the above settings are optional
 
@@ -173,6 +173,19 @@ requires:
 `when` is a [Tera condition](https://keats.github.io/tera/#if) evaluated per output using declared, resolved module arguments. False skips the requirement. `is defined` includes supplied values of `false`, `0`, and `""`; use `== true` for an enabled boolean.
 
 Requirements never add or reorder modules. `--ignore-requires` and `--ignore-all-requires` skip checks; configuration and paths are still validated.
+
+`files` also uses `path` and optional `when`:
+
+```yaml name=config
+args:
+  optional: [cuda]
+files:
+  - path: scripts/setup.sh
+  - path: scripts/cuda.sh
+    when: "cuda is defined and cuda == true"
+```
+
+Active files must exist locally or are fetched from the remote module's directory into the yard directory. False conditions skip fetching and existence checks; path syntax is always validated. Files are shared across outputs, so active declarations from different module sources cannot target the same destination. `--do-not-refetch` preserves existing remote files.
 
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.

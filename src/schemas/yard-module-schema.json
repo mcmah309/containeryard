@@ -93,9 +93,23 @@
         "files": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "File destination, relative to the yard directory. Remote sources are resolved relative to the module file."
+              },
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional Tera condition evaluated with the module's resolved arguments. Omit to always include the file when the module is used."
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
           },
-          "description": "Files to pull in with the module. Paths are relative to the yard directory and cannot contain ~ or .. components. Remote files are fetched relative to the module file in its repository."
+          "description": "Files to pull in when this module is used. Each entry requires path and optionally when. Paths are relative to the yard directory and cannot contain ~ or .. components."
         }
       },
       "required": [],

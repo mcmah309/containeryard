@@ -87,10 +87,10 @@ pub struct YamlModule {
     pub description: Option<String>,
     /// Module files that must be included earlier in each output that uses this module. Paths are
     /// relative to this module file.
-    pub requires: Option<Vec<YamlModuleRequirement>>,
+    pub requires: Option<Vec<YamlConditionalPath>>,
     /// Files to pull in with the module. Paths are relative to the yard directory and cannot
     /// contain `~` or `..` components.
-    pub files: Option<Vec<String>>,
+    pub files: Option<Vec<YamlConditionalPath>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
@@ -107,7 +107,7 @@ pub struct YamlArgumentValidation {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct YamlModuleRequirement {
+pub struct YamlConditionalPath {
     pub path: String,
     pub when: Option<String>,
 }
@@ -216,7 +216,7 @@ struct ModuleBuilder {
     fragments: Fragments,
     scripts: HashMap<String, Script>,
     required_modules: Vec<ModuleRequirement>,
-    files: Vec<String>,
+    files: Vec<ModuleFile>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
     argument_validations: Vec<ArgumentValidation>,
@@ -243,6 +243,12 @@ struct ModuleIdentity {
 struct ModuleRequirement {
     declared_path: String,
     resolved: ModuleIdentity,
+    condition: Option<ArgumentCondition>,
+}
+
+#[derive(Debug, Clone)]
+struct ModuleFile {
+    path: String,
     condition: Option<ArgumentCondition>,
 }
 
@@ -362,11 +368,27 @@ impl ModuleBuilder {
                 )));
             }
         }
-        // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
-        validate_path_references(&self.files)?;
+        let mut files = Vec::new();
+        for file in self.files {
+            if let Some(condition) = file.condition
+                && !condition
+                    .evaluate(&self.provided_template_values)
+                    .with_context(|| {
+                        format!(
+                            "File '{}' for {}",
+                            file.path,
+                            self.source_info.source_location()
+                        )
+                    })?
+            {
+                continue;
+            }
+            files.push(file.path);
+        }
         Ok(Module {
             fragments: self.fragments,
             scripts: self.scripts,
+            files,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
             name: self.name,
@@ -388,6 +410,7 @@ struct Containerfiles {
 struct Module {
     fragments: Fragments,
     scripts: HashMap<String, Script>,
+    files: Vec<String>,
     provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -752,7 +775,6 @@ async fn resolve_yard_yaml(
         validate_schema_and_create_module_builders(name_to_module_files_data).await?;
 
     // Resolve
-    resolve_additional_files(&modules, path, do_not_refetch).await?;
     let mut containerfiles_to_parts: IndexMap<String, Vec<Module>> = IndexMap::new();
     for (container_file_name, module_declarations) in output_container_files {
         let mut modules_for_container_file: Vec<Module> = Vec::new();
@@ -863,6 +885,7 @@ async fn resolve_yard_yaml(
         }
         containerfiles_to_parts.insert(container_file_name, modules_for_container_file);
     }
+    resolve_additional_files(&containerfiles_to_parts, path, do_not_refetch).await?;
     Ok(Containerfiles {
         name_to_module: containerfiles_to_parts,
     })
@@ -891,70 +914,66 @@ async fn retrieve_module_file_data(
 
 #[eros::context("Could not resolve module files")]
 async fn resolve_additional_files(
-    name_to_module: &HashMap<String, ModuleBuilder>,
+    outputs: &IndexMap<String, Vec<Module>>,
     local_download_path_root: &Path,
     do_not_refetch: bool,
 ) -> eros::Result<()> {
-    for (name, module) in name_to_module {
-        match module.source_info {
-            SourceInfoKind::Local(ref local) => {
-                let local_file_path = local_download_path_root.join(&local.path);
-                validate_path_references(&[local_file_path]).with_user_context(|| {
-                    format!("The file for local module '{name}' is missing or has an invalid path.")
-                })?;
-            }
-            SourceInfoKind::Remote(ref remote) => {
-                let git_provider = create_provider(remote.url.clone(), remote.commit.clone())?;
-                for file_path in module.files.iter() {
-                    let local_download_path = local_download_path_root.join(file_path);
-                    if local_download_path.exists() && do_not_refetch {
-                        println!(
-                            "Note: '{}' is not refetched since it already exists and `--do-not-refetch` is set.",
-                            local_download_path.display()
-                        );
-                        continue;
-                    }
-                    let remote_file_path = format!(
-                        "{}/{}",
-                        PathBuf::from(&remote.path).parent().unwrap().display(),
-                        file_path
-                    );
-                    git_provider
-                        .retrieve_file_and_put_at(&remote_file_path, &local_download_path)
-                        .await
-                        .with_context(|| {
-                            format!(
-                                "Could not download '{}' at\n{}",
-                                file_path,
-                                remote.source_location()
-                            )
-                        })
-                        .with_user_context(|| {
-                            format!(
-                                "Could not download file '{file_path}' for module '{name}'. Check the remote path and repository access."
-                            )
-                        })?;
+    // Resolve the union of active files before writing any of them. Outputs share one directory.
+    let mut selected: IndexMap<PathBuf, (&Module, &String)> = IndexMap::new();
+    for module in outputs.values().flatten() {
+        for file in &module.files {
+            let destination: PathBuf = Path::new(file)
+                .components()
+                .filter(|component| !matches!(component, Component::CurDir))
+                .collect();
+            if let Some((previous, _)) = selected.get(&destination) {
+                if previous.source_info.module_identity()?
+                    != module.source_info.module_identity()?
+                {
+                    return Err(user_error(format!(
+                        "File '{}' is declared by both {} and {}. The modules would overwrite each other's file.",
+                        destination.display(), previous.source_info.user_label(), module.source_info.user_label()
+                    )).context(format!(
+                        "Conflicting sources:\n{}\n{}", previous.source_info.source_location(), module.source_info.source_location()
+                    )));
                 }
+            } else {
+                selected.insert(destination, (module, file));
             }
-            SourceInfoKind::Inline(_) => {}
         }
     }
-    Ok(())
-}
-
-fn validate_path_references<T: AsRef<Path>>(files: &[T]) -> eros::Result<()> {
-    for file in files {
-        let file = file.as_ref();
-        let path = PathBuf::from(file);
-        is_local_absolute(&path)?;
-        if !path.exists() {
-            return Err(user_error(
-                "A configured path does not exist. Check the module path and its `files` entries.",
-            )
-            .context(format!(
-                "Configured path '{}' does not exist",
-                file.display()
+    for (module, file) in selected.values() {
+        if matches!(module.source_info, SourceInfoKind::Local(_))
+            && !local_download_path_root.join(file).exists()
+        {
+            return Err(user_error(format!(
+                "File '{}' for {} does not exist. Check its `files` entry.",
+                file,
+                module.source_info.user_label()
             )));
+        }
+    }
+    for (module, file) in selected.values() {
+        if let SourceInfoKind::Remote(remote) = &module.source_info {
+            let destination = local_download_path_root.join(file);
+            if destination.exists() && do_not_refetch {
+                println!(
+                    "Note: '{}' is not refetched since it already exists and `--do-not-refetch` is set.",
+                    destination.display()
+                );
+                continue;
+            }
+            let remote_file_path = Path::new(&remote.path)
+                .parent()
+                .unwrap_or_else(|| Path::new(""))
+                .join(file);
+            create_provider(remote.url.clone(), remote.commit.clone())?
+                .retrieve_file_and_put_at(&remote_file_path.to_string_lossy(), &destination)
+                .await
+                .with_context(|| remote.source_location())
+                .with_user_context(|| format!(
+                    "Could not download file '{file}' for module '{}'. Check the remote path and repository access.", remote.name
+                ))?;
         }
     }
     Ok(())
@@ -1009,7 +1028,7 @@ fn normalize_module_path(path: &Path) -> eros::Result<PathBuf> {
 
 fn resolve_module_requirement(
     source_info: &SourceInfoKind,
-    requirement: YamlModuleRequirement,
+    requirement: YamlConditionalPath,
     required_args: &HashSet<String>,
     optional_args: &HashSet<String>,
 ) -> eros::Result<ModuleRequirement> {
@@ -1064,28 +1083,6 @@ async fn validate_schema_and_create_module_builders(
         let module =
             validate_and_create_module_builder(module_files, validate_module_schema_fn).await?;
         modules.insert(name, module);
-    }
-
-    for (index, (name1, module1)) in modules.iter().enumerate() {
-        for (name1, module2) in modules.iter().skip(index + 1) {
-            for file1 in &module1.files {
-                for file2 in &module2.files {
-                    if file1 == file2 {
-                        return Err(user_error(format!(
-                            "File '{}' is declared by both {} and {}. The modules would overwrite each other's file.",
-                            file1,
-                            module1.source_info.user_label(),
-                            module2.source_info.user_label()
-                        ))
-                        .context(format!(
-                            "Conflicting sources:\n{}\n{}",
-                            module1.source_info.source_location(),
-                            module2.source_info.source_location()
-                        )));
-                    }
-                }
-            }
-        }
     }
 
     Ok(modules)
@@ -1179,9 +1176,13 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             })
             .collect::<eros::Result<Vec<_>>>()?;
 
-        for file in &files {
-            is_local_absolute(&PathBuf::from(file))?;
-        }
+        let files = files.into_iter().map(|file| {
+            is_local_absolute(Path::new(&file.path))?;
+            let condition = file.when.map(|when| ArgumentCondition::new(
+                when, &required_template_values, &optional_template_values, "files.when"
+            )).transpose()?;
+            Ok(ModuleFile { path: file.path, condition })
+        }).collect::<eros::Result<Vec<_>>>()?;
         Ok((
             required_modules,
             files,
