@@ -91,7 +91,7 @@ pub struct YamlModule {
     pub split: bool,
     /// Module files that must be included earlier in each output that uses this module. Paths are
     /// relative to this module file.
-    pub requires: Option<Vec<String>>,
+    pub requires: Option<Vec<YamlModuleRequirement>>,
     /// List of required files for the module. Must be absolution paths from the current directory without a starting "/"
     pub required_files: Option<Vec<String>>,
 }
@@ -100,6 +100,12 @@ pub struct YamlModule {
 pub struct YamlArgs {
     pub optional: Option<Vec<String>>,
     pub required: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct YamlModuleRequirement {
+    pub path: String,
+    pub when: Option<String>,
 }
 
 // Deserialized yard.yaml
@@ -237,6 +243,69 @@ struct ModuleIdentity {
 struct ModuleRequirement {
     declared_path: String,
     resolved: ModuleIdentity,
+    condition: Option<RequirementCondition>,
+}
+
+#[derive(Debug, Clone)]
+struct RequirementCondition {
+    expression: String,
+    template: Tera,
+}
+
+impl RequirementCondition {
+    fn new(
+        expression: String,
+        required_args: &HashSet<String>,
+        optional_args: &HashSet<String>,
+    ) -> eros::Result<Self> {
+        // A condition is one expression, not a template containing additional statements.
+        if expression.contains("%}") {
+            return Err(user_error(
+                "A `requires.when` condition must be a Tera expression without template tags.",
+            ));
+        }
+        let mut template = Tera::default();
+        template
+            .add_raw_template(
+                "requires.when",
+                &format!("{{% if {expression} %}}true{{% else %}}false{{% endif %}}"),
+            )
+            .with_context(|| format!("Invalid requirement condition: '{expression}'"))
+            .user_context(
+                "A `requires.when` condition is invalid. Use a Tera condition expression.",
+            )?;
+        let mut variables: Vec<_> = template
+            .get_template_variables("requires.when")
+            .context("Could not inspect requirement condition arguments")?
+            .into_iter()
+            .collect();
+        variables.sort_unstable();
+        for variable in variables {
+            if !required_args.contains(variable) && !optional_args.contains(variable) {
+                return Err(user_error(format!(
+                    "Requirement condition '{}' references undeclared argument '{}'. Declare it under `args.required` or `args.optional`.",
+                    expression, variable
+                )));
+            }
+        }
+        Ok(Self {
+            expression,
+            template,
+        })
+    }
+
+    fn evaluate(&self, values: &HashMap<String, TemplateValue>) -> eros::Result<bool> {
+        let mut context = tera::Context::new();
+        for (name, value) in values {
+            context.insert(name.clone(), value);
+        }
+        let rendered = self
+            .template
+            .render("requires.when", &context)
+            .with_context(|| format!("Could not evaluate requirement condition '{}'", self.expression))
+            .user_context("A `requires.when` condition could not be evaluated. Check its expression and argument types.")?;
+        Ok(rendered == "true")
+    }
 }
 
 impl ModuleBuilder {
@@ -728,23 +797,6 @@ async fn resolve_yard_yaml(
                             declared_module.name, YARD_YAML_FILE_NAME
                         ))
                     })?;
-                    if !ignore_all_requires && !ignore_requires.contains(&declared_module.name) {
-                        for requirement in &module.required_modules {
-                            if !seen_module_paths.contains(&requirement.resolved) {
-                                return Err(user_error(format!(
-                                    "Module '{}' requires module '{}' to be included before it in output '{}'.",
-                                    declared_module.name,
-                                    requirement.declared_path,
-                                    container_file_name
-                                ))
-                                .context(format!(
-                                    "Required module resolved to '{}' for {}",
-                                    requirement.resolved.path.display(),
-                                    module.source_info.source_location()
-                                )));
-                            }
-                        }
-                    }
                     let mut module = module.clone();
                     module.name = Some(declared_module.name.clone());
                     for (var, val) in declared_module.template_vars {
@@ -761,7 +813,41 @@ async fn resolve_yard_yaml(
                         .source_info
                         .module_identity()?
                         .expect("Input modules always have a module identity");
-                    modules_for_container_file.push(module.build()?);
+                    let requirements = std::mem::take(&mut module.required_modules);
+                    let module = module.build()?;
+                    if !ignore_all_requires && !ignore_requires.contains(&declared_module.name) {
+                        for requirement in requirements {
+                            if let Some(condition) = &requirement.condition
+                                && !condition
+                                    .evaluate(&module.provided_template_values)
+                                    .with_context(|| {
+                                        format!(
+                                            "Requirement '{}' for module '{}' in output '{}' at {}",
+                                            requirement.declared_path,
+                                            declared_module.name,
+                                            container_file_name,
+                                            module.source_info.source_location()
+                                        )
+                                    })?
+                            {
+                                continue;
+                            }
+                            if !seen_module_paths.contains(&requirement.resolved) {
+                                return Err(user_error(format!(
+                                    "Module '{}' requires module '{}' to be included before it in output '{}'.",
+                                    declared_module.name,
+                                    requirement.declared_path,
+                                    container_file_name
+                                ))
+                                .context(format!(
+                                    "Required module resolved to '{}' for {}",
+                                    requirement.resolved.path.display(),
+                                    module.source_info.source_location()
+                                )));
+                            }
+                        }
+                    }
+                    modules_for_container_file.push(module);
                     seen_module_paths.insert(module_identity);
                 }
                 UseModule::Output(_) => {
@@ -916,8 +1002,15 @@ fn normalize_module_path(path: &Path) -> eros::Result<PathBuf> {
 
 fn resolve_module_requirement(
     source_info: &SourceInfoKind,
-    required_path: String,
+    requirement: YamlModuleRequirement,
+    required_args: &HashSet<String>,
+    optional_args: &HashSet<String>,
 ) -> eros::Result<ModuleRequirement> {
+    let required_path = requirement.path;
+    let condition = requirement
+        .when
+        .map(|when| RequirementCondition::new(when, required_args, optional_args))
+        .transpose()?;
     let source = source_info
         .module_identity()?
         .expect("Only file-backed modules can declare requirements");
@@ -941,6 +1034,7 @@ fn resolve_module_requirement(
             origin: source.origin,
             path: resolved_path,
         },
+        condition,
     })
 }
 
@@ -1037,11 +1131,6 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         } = raw_module;
         let args = args.unwrap_or_default();
         let required_files = required_files.unwrap_or_default();
-        let required_modules = requires
-            .unwrap_or_default()
-            .into_iter()
-            .map(|path| resolve_module_requirement(&module_files.source_info, path))
-            .collect::<eros::Result<Vec<_>>>()?;
         let required_template_values: HashSet<String> =
             args.required.unwrap_or_default().into_iter().collect();
         let optional_template_values: HashSet<String> =
@@ -1057,6 +1146,19 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
                 )));
             }
         }
+
+        let required_modules = requires
+            .unwrap_or_default()
+            .into_iter()
+            .map(|requirement| {
+                resolve_module_requirement(
+                    &module_files.source_info,
+                    requirement,
+                    &required_template_values,
+                    &optional_template_values,
+                )
+            })
+            .collect::<eros::Result<Vec<_>>>()?;
 
         for required_file in required_files.iter() {
             is_local_absolute(&PathBuf::from(required_file))?;

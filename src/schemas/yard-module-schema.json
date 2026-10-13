@@ -50,10 +50,23 @@
         "requires": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required module path, relative to the declaring module file."
+              },
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional Tera condition expression evaluated with this module's resolved arguments. Use `arg is defined` to test whether an argument was supplied. Omit for an unconditional requirement."
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
           },
-          "description": "Module paths that must be included earlier in any output using this module. Each path is resolved relative to this module file."
+          "description": "Modules that must be included earlier in any output using this module. Every entry requires path, resolved relative to this module file. An optional when expression makes a requirement conditional."
         },
         "required_files": {
           "type": "array",

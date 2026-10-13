@@ -145,7 +145,7 @@ args:
 # Modules that must appear earlier in every output using this module.
 # Paths are relative to this module file.
 requires:
-  - ../base/alpine.md
+  - path: ../base/alpine.md
 # Files to be pulled in with this module
 required_files:
   - file/path
@@ -155,6 +155,35 @@ split: true
 All of the above settings are optional
 
 `requires` lists module files that must be included earlier in every output that uses the declaring module. Paths are resolved relative to the module file, and modules are matched by their source path rather than their `yard.yaml` input alias. For remote modules, the required module must come from the same repository and commit.
+
+Every `requires` entry must be an object with `path`. Omit `when` for an unconditional requirement, or add it to make the requirement conditional:
+
+```yaml
+args:
+  optional:
+    - arg1
+    - arg2
+    - cuda
+    - distro
+requires:
+  - path: ../base.md
+  - path: ../path/to/module.md
+    when: "arg1 is defined and arg2 is defined"
+  - path: ../alternative.md
+    when: "arg1 is defined or arg2 is defined"
+  - path: ../cuda.md
+    when: "cuda is defined and cuda == true"
+  - path: ../alpine.md
+    when: 'distro is defined and distro == "alpine"'
+  - path: ../default.md
+    when: "arg1 is not defined"
+```
+
+`when` is a [Tera condition expression](https://keats.github.io/tera/#if), without template tags. It supports presence checks, comparisons, `and`, `or`, `not`, and parentheses. Conditions are evaluated separately for each use of the module in an output, after resolving argument values from environment variables or shell commands. They use only that module's arguments. Every argument referenced by a condition must be declared under `args.required` or `args.optional`; invalid expressions and undeclared arguments are errors.
+
+`arg is defined` checks whether an argument was supplied, even if its value is `false`, `0`, or an empty string. Use `arg is defined and arg == true` when a boolean flag must be enabled. String values retain their type: `"true"` is a string, whereas `true` is a boolean.
+
+A false condition skips that requirement. A true condition enforces the same earlier-module check as an unconditional requirement; `requires` does not automatically include or reorder modules. Conditional paths follow the same path validation rules as unconditional paths, even when their condition is false. The existing `--ignore-requires` and `--ignore-all-requires` flags also skip conditional requirement checks; configuration syntax and declared argument names are still validated.
 
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.

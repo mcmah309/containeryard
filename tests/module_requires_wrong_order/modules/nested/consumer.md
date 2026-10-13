@@ -1,6 +1,6 @@
 ```yaml
 requires:
-  - ../base.md
+  - path: ../base.md
 ```
 
 ```containerfile
