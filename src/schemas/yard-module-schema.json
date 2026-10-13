@@ -27,6 +27,28 @@
               "items": {
                 "type": "string"
               }
+            },
+            "validate": {
+              "type": "array",
+              "description": "Tera assertions evaluated with the module's resolved arguments. Every assertion must pass.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "assert": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Tera condition expression that must be true. References must name declared arguments."
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "description": "Message reported when the assertion is false."
+                  }
+                },
+                "required": ["assert", "message"],
+                "additionalProperties": false
+              }
             }
           },
           "anyOf": [
@@ -38,6 +60,11 @@
             {
               "required": [
                 "required"
+              ]
+            },
+            {
+              "required": [
+                "validate"
               ]
             }
           ]

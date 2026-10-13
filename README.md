@@ -147,6 +147,18 @@ files:
 ```
 All of the above settings are optional
 
+Use `args.validate` for relationships or constraints between arguments:
+
+```yaml name=config
+args:
+  optional: [username, password]
+  validate:
+    - assert: "(username is defined) == (password is defined)"
+      message: "username and password must be supplied together."
+```
+
+All assertions must pass after argument values are resolved and required/accepted arguments are checked. False assertions report their `message`; invalid expressions or undeclared argument references are configuration errors. Validation runs before module requirements and is unaffected by `--ignore-requires`.
+
 `requires` checks that modules appear earlier in the output. Each entry needs a `path` relative to this module, matched by source file rather than input alias. Remote dependencies must share its repository and commit. Add `when` for a conditional requirement:
 
 ```yaml name=config

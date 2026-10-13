@@ -97,6 +97,13 @@ pub struct YamlModule {
 pub struct YamlArgs {
     pub optional: Option<Vec<String>>,
     pub required: Option<Vec<String>>,
+    pub validate: Option<Vec<YamlArgumentValidation>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct YamlArgumentValidation {
+    pub assert: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -212,6 +219,7 @@ struct ModuleBuilder {
     files: Vec<String>,
     required_template_values: HashSet<String>,
     optional_template_values: HashSet<String>,
+    argument_validations: Vec<ArgumentValidation>,
     provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -235,54 +243,63 @@ struct ModuleIdentity {
 struct ModuleRequirement {
     declared_path: String,
     resolved: ModuleIdentity,
-    condition: Option<RequirementCondition>,
+    condition: Option<ArgumentCondition>,
 }
 
 #[derive(Debug, Clone)]
-struct RequirementCondition {
-    expression: String,
-    template: Tera,
+struct ArgumentValidation {
+    condition: ArgumentCondition,
+    message: String,
 }
 
-impl RequirementCondition {
+#[derive(Debug, Clone)]
+struct ArgumentCondition {
+    expression: String,
+    template: Tera,
+    field: &'static str,
+}
+
+impl ArgumentCondition {
     fn new(
         expression: String,
         required_args: &HashSet<String>,
         optional_args: &HashSet<String>,
+        field: &'static str,
     ) -> eros::Result<Self> {
         // A condition is one expression, not a template containing additional statements.
         if expression.contains("%}") {
-            return Err(user_error(
-                "A `requires.when` condition must be a Tera expression without template tags.",
-            ));
+            return Err(user_error(format!(
+                "A `{field}` condition must be a Tera expression without template tags."
+            )));
         }
         let mut template = Tera::default();
         template
             .add_raw_template(
-                "requires.when",
+                field,
                 &format!("{{% if {expression} %}}true{{% else %}}false{{% endif %}}"),
             )
-            .with_context(|| format!("Invalid requirement condition: '{expression}'"))
-            .user_context(
-                "A `requires.when` condition is invalid. Use a Tera condition expression.",
-            )?;
+            .with_context(|| format!("Invalid condition in `{field}`: '{expression}'"))
+            .with_user_context(|| {
+                format!("A `{field}` condition is invalid. Use a Tera condition expression.")
+            })?;
         let mut variables: Vec<_> = template
-            .get_template_variables("requires.when")
-            .context("Could not inspect requirement condition arguments")?
+            .get_template_variables(field)
+            .context("Could not inspect condition arguments")?
             .into_iter()
             .collect();
         variables.sort_unstable();
         for variable in variables {
             if !required_args.contains(variable) && !optional_args.contains(variable) {
                 return Err(user_error(format!(
-                    "Requirement condition '{}' references undeclared argument '{}'. Declare it under `args.required` or `args.optional`.",
-                    expression, variable
+                    "Condition '{}' in `{}` references undeclared argument '{}'. Declare it under `args.required` or `args.optional`.",
+                    expression, field, variable
                 )));
             }
         }
         Ok(Self {
             expression,
             template,
+            field,
         })
     }
 
@@ -293,9 +310,11 @@ impl RequirementCondition {
         }
         let rendered = self
             .template
-            .render("requires.when", &context)
-            .with_context(|| format!("Could not evaluate requirement condition '{}'", self.expression))
-            .user_context("A `requires.when` condition could not be evaluated. Check its expression and argument types.")?;
+            .render(self.field, &context)
+            .with_context(|| format!("Could not evaluate condition '{}' in `{}`", self.expression, self.field))
+            .with_user_context(|| format!(
+                "A `{}` condition could not be evaluated. Check its expression and argument types.", self.field
+            ))?;
         Ok(rendered == "true")
     }
 }
@@ -327,6 +346,19 @@ impl ModuleBuilder {
                 .context(format!(
                     "Unexpected template variable for {}",
                     self.source_info.source_location()
+                )));
+            }
+        }
+        for validation in &self.argument_validations {
+            if !validation
+                .condition
+                .evaluate(&self.provided_template_values)
+                .with_context(|| self.source_info.source_location())?
+            {
+                return Err(user_error(format!(
+                    "Argument validation failed for {}: {}",
+                    self.source_info.user_label(),
+                    validation.message
                 )));
             }
         }
@@ -743,6 +775,7 @@ async fn resolve_yard_yaml(
                             files: Vec::new(),
                             required_template_values: HashSet::new(),
                             optional_template_values: HashSet::new(),
+                            argument_validations: Vec::new(),
                             provided_template_values: HashMap::new(),
                             source_info: SourceInfoKind::Inline(InlineModuleInfo {
                                 value: inline.value,
@@ -782,7 +815,12 @@ async fn resolve_yard_yaml(
                         .module_identity()?
                         .expect("Input modules always have a module identity");
                     let requirements = std::mem::take(&mut module.required_modules);
-                    let module = module.build()?;
+                    let module = module.build().with_user_context(|| {
+                        format!(
+                            "Could not use module '{}' in output '{}'.",
+                            declared_module.name, container_file_name
+                        )
+                    })?;
                     if !ignore_all_requires && !ignore_requires.contains(&declared_module.name) {
                         for requirement in requirements {
                             if let Some(condition) = &requirement.condition
@@ -978,7 +1016,7 @@ fn resolve_module_requirement(
     let required_path = requirement.path;
     let condition = requirement
         .when
-        .map(|when| RequirementCondition::new(when, required_args, optional_args))
+        .map(|when| ArgumentCondition::new(when, required_args, optional_args, "requires.when"))
         .transpose()?;
     let source = source_info
         .module_identity()?
@@ -1063,6 +1101,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         files,
         required_template_values,
         optional_template_values,
+        argument_validations,
     ) = (|| -> eros::Result<_> {
         // Modules may omit configuration entirely.
         let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty() {
@@ -1114,6 +1153,19 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             }
         }
 
+        let argument_validations = args.validate.unwrap_or_default().into_iter()
+            .map(|validation| {
+                Ok(ArgumentValidation {
+                    condition: ArgumentCondition::new(
+                        validation.assert,
+                        &required_template_values,
+                        &optional_template_values,
+                        "args.validate.assert",
+                    )?,
+                    message: validation.message,
+                })
+            }).collect::<eros::Result<Vec<_>>>()?;
+
         let required_modules = requires
             .unwrap_or_default()
             .into_iter()
@@ -1135,6 +1187,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             files,
             required_template_values,
             optional_template_values,
+            argument_validations,
         ))
     })()
     .with_context(|| module_files.source_info.source_location())
@@ -1152,6 +1205,7 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         files,
         required_template_values,
         optional_template_values,
+        argument_validations,
         provided_template_values: HashMap::new(),
         source_info: module_files.source_info,
         name: None,
