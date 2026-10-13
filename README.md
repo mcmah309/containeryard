@@ -94,31 +94,26 @@ Modules represent specific features of a container. e.g. The [rust module](https
 Modules can be easily reused, improved, and version controlled.
 
 ### Module File Format
-A module consists of one file with an optional [config section](#configuration) and one or more [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) sections.
+A Markdown module has an optional `yaml name=config` block and at least one named [Containerfile (aka Dockerfile)](https://docs.docker.com/reference/dockerfile/) fragment:
 
 ````markdown
-```yaml
-
+```yaml name=config
 # Configuration here
-
 ```
-```dockerfile
-
+```dockerfile name=main
 # Dockerfile Statements Here
-
 ```
 ````
 
----
-Alternatively the `yaml` configuration block can be omitted. Or if both the `yaml` and `dockerfile`/`containerfile` blocks are omitted, then the file is just interpreted as a regular Containerfile without any configuration (example [here](https://github.com/mcmah309/containeryard/blob/master/examples/local_python_dev_with_cuda/local.Containerfile)). 
+Unnamed fences are documentation. `Containerfile`/`Dockerfile` inputs, including `.Containerfile`/`.Dockerfile` suffixes (case-insensitive), are treated as a single `main` fragment. Other files without Markdown fences work the same way.
 
-For [split modules](#split-modules), the file has a second Containerfile section and can optionally have a third.
+`containerfile` and `dockerfile` are interchangeable. See [named fragments](#named-fragments) for placement rules.
 
 ### Module Parts
 
 #### Containerfile
 Containerfile defines the core of the module. E.g.
-```dockerfile
+```dockerfile name=main
 # Note: `version` is defined in the configuration in the next section
 FROM alpine:{{ version | default (value="latest") }}
 
@@ -127,13 +122,13 @@ RUN apk update \
     && apk add --no-cache ca-certificates \
     && update-ca-certificates
 ```
-This file is first treated as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
+This block is first treated as a [Tera](https://keats.github.io/tera/docs/#templates) template, then compiled.
 The result is a pure Containerfile component that can be combined with other modules.
 
 #### Configuration
 
-The configuration component is a `yaml` block and provides metadata for what the Containerfile component needs. E.g.
-```yaml
+The configuration component is a `yaml name=config` block and provides metadata for what the Containerfile component needs. E.g.
+```yaml name=config
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
 
 description: "This is a modules description"
@@ -149,41 +144,23 @@ requires:
 # Files to be pulled in with this module
 files:
   - file/path
-# Split this module across build, install, and optional finalize fragments
-split: true
 ```
 All of the above settings are optional
 
-`requires` lists module files that must be included earlier in every output that uses the declaring module. Paths are resolved relative to the module file, and modules are matched by their source path rather than their `yard.yaml` input alias. For remote modules, the required module must come from the same repository and commit.
+`requires` checks that modules appear earlier in the output. Each entry needs a `path` relative to this module, matched by source file rather than input alias. Remote dependencies must share its repository and commit. Add `when` for a conditional requirement:
 
-Every `requires` entry must be an object with `path`. Omit `when` for an unconditional requirement, or add it to make the requirement conditional:
-
-```yaml
+```yaml name=config
 args:
-  optional:
-    - arg1
-    - arg2
-    - cuda
-    - distro
+  optional: [cuda]
 requires:
   - path: ../base.md
-  - path: ../path/to/module.md
-    when: "arg1 is defined and arg2 is defined"
-  - path: ../alternative.md
-    when: "arg1 is defined or arg2 is defined"
   - path: ../cuda.md
     when: "cuda is defined and cuda == true"
-  - path: ../alpine.md
-    when: 'distro is defined and distro == "alpine"'
-  - path: ../default.md
-    when: "arg1 is not defined"
 ```
 
-`when` is a [Tera condition expression](https://keats.github.io/tera/#if), without template tags. It supports presence checks, comparisons, `and`, `or`, `not`, and parentheses. Conditions are evaluated separately for each use of the module in an output, after resolving argument values from environment variables or shell commands. They use only that module's arguments. Every argument referenced by a condition must be declared under `args.required` or `args.optional`; invalid expressions and undeclared arguments are errors.
+`when` is a [Tera condition](https://keats.github.io/tera/#if) evaluated per output using declared, resolved module arguments. False skips the requirement. `is defined` includes supplied values of `false`, `0`, and `""`; use `== true` for an enabled boolean.
 
-`arg is defined` checks whether an argument was supplied, even if its value is `false`, `0`, or an empty string. Use `arg is defined and arg == true` when a boolean flag must be enabled. String values retain their type: `"true"` is a string, whereas `true` is a boolean.
-
-A false condition skips that requirement. A true condition enforces the same earlier-module check as an unconditional requirement; `requires` does not automatically include or reorder modules. Conditional paths follow the same path validation rules as unconditional paths, even when their condition is false. The existing `--ignore-requires` and `--ignore-all-requires` flags also skip conditional requirement checks; configuration syntax and declared argument names are still validated.
+Requirements never add or reorder modules. `--ignore-requires` and `--ignore-all-requires` skip checks; configuration and paths are still validated.
 
 `yard.yaml` provides the values for `args:` declared in a this block.
 e.g.
@@ -212,43 +189,39 @@ RUN apk update \
 
 For more module examples click [here](https://github.com/mcmah309/yard_module_repository/tree/master).
 
-### Split Modules
+### Named Fragments
 
-Certain builders like Docker's BuildKit can parallelize stages for faster builds and smaller images. Split modules take advantage of this by dividing a module into two or three `containerfile`/`dockerfile` blocks: a required **build fragment**, a required **install fragment**, and an optional **finalize fragment**. Mark the module as split by setting `split: true` in its configuration block (it defaults to `false` when omitted).
+Name each `containerfile` or `dockerfile` block to select its placement:
 
-When modules are combined, the **build fragments of all split modules are hoisted to the start** of the generated Containerfile, the **install fragment is injected where the module is declared**, and each optional **finalize fragment is appended after all declared modules**. Finalize fragments preserve module declaration order. This is useful for defining dependencies in isolated build stages (for example, a virtual environment built in a `builder` stage), copying the result into the final image, and deferring instructions that must run after the rest of the image is assembled.
+| Fence | Placement |
+|---|---|
+| `containerfile name=build` | Before all `main` fragments |
+| `containerfile name=main` | Where the module is declared in the output |
+| `containerfile name=finalize` | After all `main` fragments |
 
-For example, given a split module `python-deps` (`python_deps.md`):
+Use any combination, once per name. Module declaration order is preserved within each group; Markdown block order does not affect placement. Unknown or duplicate names are errors. `FROM` instructions and stage names remain explicit.
+
+For example, `python_deps.md`:
 
 ````markdown
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mcmah309/containeryard/master/src/schemas/yard-module-schema.json
-
-description: "Python dependencies built in a split module"
-split: true
+```yaml name=config
+description: "Python dependencies built in a separate stage"
 ```
-```dockerfile
-# Build & install dependencies
+```dockerfile name=build
 FROM python:3.11-slim AS python-deps-builder
-
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-RUN pip install --no-cache-dir numpy pandas scipy
+RUN /opt/venv/bin/pip install --no-cache-dir numpy pandas scipy
 ```
-```dockerfile
-# Copy the entire virtual environment
+```dockerfile name=main
 COPY --from=python-deps-builder /opt/venv /opt/venv
-
 ENV PATH="/opt/venv/bin:$PATH"
 ```
-```dockerfile
-# Run after every declared module
+```dockerfile name=finalize
 RUN test -x /opt/venv/bin/python
 ```
 ````
 
-and a `yard.yaml`:
+With this `yard.yaml`:
 
 ```yaml
 inputs:
@@ -263,31 +236,24 @@ outputs:
     - RUN echo after
 ```
 
-the generated `out.Containerfile` would be:
+The generated instructions are:
 
 ```dockerfile
-# Build & install dependencies
 FROM python:3.11-slim AS python-deps-builder
-
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-RUN pip install --no-cache-dir numpy pandas scipy
+RUN /opt/venv/bin/pip install --no-cache-dir numpy pandas scipy
 
 FROM python:3.11-slim
-
 RUN echo before
 
-# Copy the entire virtual environment
 COPY --from=python-deps-builder /opt/venv /opt/venv
-
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN echo after
-
-# Run after every declared module
 RUN test -x /opt/venv/bin/python
 ```
+
+The build stage is hoisted, the copy stays at the module's declaration, and the final check runs after all `main` fragments.
 
 ## Installation
 
@@ -367,6 +333,38 @@ podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
 ```
 
 Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
+
+### Embedded Scripts
+
+Declare a named `bash` or `sh` block and reference it at the end of `RUN`:
+
+````markdown
+```bash name=install
+set -euo pipefail
+packages=(curl git)
+apt-get update
+apt-get install -y "${packages[@]}"
+```
+
+```containerfile name=main
+RUN {{ script(name="install") }}
+```
+````
+
+This generates a quoted heredoc with a collision-free delimiter, executed during the image build by the fence's interpreter. The interpreter must be installed in the image. Script bodies are literal by default, preserving shell syntax and Tera-like text.
+
+- `template=true` renders the script with declared module arguments. Use `{{ version | shell_quote }}` for a string used as one shell argument, without surrounding quotes. Values are rendered once; recursive `script()` calls are unsupported.
+- `dedent=true` removes common indentation before templating. By default, only fence indentation is removed; relative indentation, blank lines, trailing spaces, and backslashes are preserved. CRLF is normalized to LF.
+
+Options can be combined. `RUN` flags go before the helper, with no other commands before or after it:
+
+```dockerfile
+RUN --mount=type=cache,target=/var/cache/apt {{ script(name="install") }}
+```
+
+Names are case-sensitive, unique within a module, and available to all its fragments. They may contain ASCII letters, digits, underscores, and hyphens. Use longer or tilde fences for scripts containing backtick fences.
+
+A heredoc-capable builder is required. Outputs default to `# syntax=docker/dockerfile:1` unless explicitly configured. Leading `syntax`, `escape`, and `check` directives are hoisted and deduplicated; conflicting values are errors.
 
 ## FAQ
 ### Why Use ContainerYard?
