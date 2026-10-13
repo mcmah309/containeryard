@@ -1,10 +1,9 @@
-```yaml
-description: "A split module without a finalize fragment"
-split: true
+```yaml name=config
+description: "A module with build and main fragments"
 ```
-```dockerfile
+```containerfile name=build
 FROM alpine AS metadata-builder
 ```
-```dockerfile
+```containerfile name=main
 COPY --from=metadata-builder /etc/alpine-release /tmp/alpine-release
 ```

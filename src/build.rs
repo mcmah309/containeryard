@@ -14,7 +14,9 @@ use tokio::fs;
 use tracing::trace;
 
 use crate::{
+    module_markdown::Fragments,
     remote_resolvers::{GitProvider, create_provider},
+    scripts::{self, OutputDirectives, Script},
     user_error::user_error,
 };
 
@@ -83,12 +85,6 @@ pub struct YamlModule {
     pub args: Option<YamlArgs>,
     /// This is a modules description
     pub description: Option<String>,
-    /// If true, this module is split into build, install, and optional finalize fragments. The
-    /// build fragment is hoisted to the start of the generated Containerfile, the install fragment
-    /// is injected where the module is declared, and the finalize fragment is appended after all
-    /// declared modules. Defaults to false.
-    #[serde(default)]
-    pub split: bool,
     /// Module files that must be included earlier in each output that uses this module. Paths are
     /// relative to this module file.
     pub requires: Option<Vec<YamlModuleRequirement>>,
@@ -210,13 +206,8 @@ struct UseInputModule {
 /// Builder for when constructing all the values needed to operate on the template
 #[derive(Debug, Clone)]
 struct ModuleBuilder {
-    containerfile_data: String,
-    /// Install fragment template for split modules. `None` for regular modules.
-    install_fragment_data: Option<String>,
-    /// Optional fragment appended after all declared modules.
-    finalize_fragment_data: Option<String>,
-    /// Whether this module is split across output positions.
-    split: bool,
+    fragments: Fragments,
+    scripts: HashMap<String, Script>,
     required_modules: Vec<ModuleRequirement>,
     files: Vec<String>,
     required_template_values: HashSet<String>,
@@ -341,25 +332,9 @@ impl ModuleBuilder {
         }
         // This is not necessary at this point, as this should have already been checked. But kept just to make sure.
         validate_path_references(&self.files)?;
-        if self.split && self.install_fragment_data.is_none() {
-            return Err(user_error(format!(
-                "{} is marked as split (`split: true`) but has no install fragment. Split modules require at least two Containerfile blocks: a build fragment followed by an install fragment.",
-                self.source_info.user_label()
-            ))
-            .context(self.source_info.source_location()));
-        }
-        if !self.split && self.install_fragment_data.is_some() {
-            return Err(user_error(format!(
-                "{} has multiple Containerfile blocks but is not marked as split. Add `split: true` to its configuration or combine the blocks.",
-                self.source_info.user_label()
-            ))
-            .context(self.source_info.source_location()));
-        }
         Ok(Module {
-            containerfile_template: self.containerfile_data,
-            install_fragment_template: self.install_fragment_data,
-            finalize_fragment_template: self.finalize_fragment_data,
-            split: self.split,
+            fragments: self.fragments,
+            scripts: self.scripts,
             provided_template_values: self.provided_template_values,
             source_info: self.source_info,
             name: self.name,
@@ -379,13 +354,8 @@ struct Containerfiles {
 /// The template Containerfile and config combined. Ready to apply
 #[derive(Debug, Clone)]
 struct Module {
-    containerfile_template: String,
-    /// Install fragment template for split modules. `None` for regular modules.
-    install_fragment_template: Option<String>,
-    /// Optional fragment appended after all declared modules.
-    finalize_fragment_template: Option<String>,
-    /// Whether this module is split across output positions.
-    split: bool,
+    fragments: Fragments,
+    scripts: HashMap<String, Script>,
     provided_template_values: HashMap<String, TemplateValue>,
     /// source info for better errors
     source_info: SourceInfoKind,
@@ -498,12 +468,9 @@ impl SourceInfo for SourceInfoKind {
 //************************************************************************//
 
 pub struct ModuleFileData {
-    pub containerfile_data: String,
+    pub fragments: Fragments,
+    pub scripts: HashMap<String, Script>,
     pub config_data: String,
-    /// Install fragment for split modules. `None` when only one Containerfile block is present.
-    pub install_fragment_data: Option<String>,
-    /// Optional finalize fragment for split modules.
-    pub finalize_fragment_data: Option<String>,
     pub source_info: SourceInfoKind,
 }
 
@@ -730,10 +697,9 @@ async fn resolve_yard_yaml(
         local_name_to_module_files_data.insert(
             name.clone(),
             ModuleFileData {
-                containerfile_data: module_data.containerfile,
+                fragments: module_data.fragments,
+                scripts: module_data.scripts,
                 config_data: module_data.config,
-                install_fragment_data: module_data.install_fragment,
-                finalize_fragment_data: module_data.finalize_fragment,
                 source_info: SourceInfoKind::Local(LocalModuleInfo { path, name }),
             },
         );
@@ -768,10 +734,11 @@ async fn resolve_yard_yaml(
                     inline_counter += 1;
                     modules_for_container_file.push(
                         ModuleBuilder {
-                            containerfile_data: inline.value.clone(),
-                            install_fragment_data: None,
-                            finalize_fragment_data: None,
-                            split: false,
+                            fragments: Fragments {
+                                main: Some(inline.value.clone()),
+                                ..Fragments::default()
+                            },
+                            scripts: HashMap::new(),
                             required_modules: Vec::new(),
                             files: Vec::new(),
                             required_template_values: HashSet::new(),
@@ -1096,9 +1063,8 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         files,
         required_template_values,
         optional_template_values,
-        split,
     ) = (|| -> eros::Result<_> {
-        // If there is no config block, default to a regular, non-split module.
+        // Modules may omit configuration entirely.
         let yard_module_yaml: serde_yaml::Value = if module_files.config_data.trim().is_empty() {
             serde_yaml::Value::Null
         } else {
@@ -1126,7 +1092,6 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
         }
         let YamlModule {
             args,
-            split,
             requires,
             files,
             ..
@@ -1170,7 +1135,6 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
             files,
             required_template_values,
             optional_template_values,
-            split,
         ))
     })()
     .with_context(|| module_files.source_info.source_location())
@@ -1182,10 +1146,8 @@ async fn validate_and_create_module_builder<F: Fn(&serde_yaml::Value) -> eros::R
     })?;
 
     Ok(ModuleBuilder {
-        containerfile_data: module_files.containerfile_data,
-        install_fragment_data: module_files.install_fragment_data,
-        finalize_fragment_data: module_files.finalize_fragment_data,
-        split,
+        fragments: module_files.fragments,
+        scripts: module_files.scripts,
         required_modules,
         files,
         required_template_values,
@@ -1266,111 +1228,56 @@ type Outputs = Vec<(String, String)>;
 
 /// Apply args to each template and collect
 fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Result<Outputs> {
-    let mut tera = Tera::default();
-    // No escaping, shouldn't matter though since we don't use these file types, but just to future proof.
-    tera.autoescape_on(Vec::<&str>::new());
-    tera.set_escape_fn(|e, writer| writer.write(e.as_bytes()).map(|_| ()));
-
     /// Renders a single template with the provided values, attaching source info on error.
     fn render(
-        tera: &Tera,
         template: &str,
+        scripts: &HashMap<String, Script>,
         provided_template_values: &HashMap<String, TemplateValue>,
         source_info: &SourceInfoKind,
+        directives: &mut OutputDirectives,
     ) -> eros::Result<String> {
         let mut context = tera::Context::new();
         for (var, val) in provided_template_values {
             context.insert(var.clone(), val);
         }
-        let rendered = tera.render_str(template, &context, false);
-        let rendered = match rendered {
-            Ok(val) => val,
-            Err(e) => Err(e).with_context(|| {
-                format!(
-                    "Could not render template for Containerfile part found at:\n{}",
-                    source_info.source_location(),
-                )
-            })
-            .user_context(
-                "Could not render a module template. Check its template syntax and supplied arguments.",
-            )?,
-        };
-        Ok(rendered.trim().to_string())
+        scripts::render(template, scripts, &context, directives)
+            .with_context(|| source_info.source_location())
+            .with_user_context(|| format!("Could not render {}.", source_info.user_label()))
     }
 
     let mut outputs = Vec::new();
     for (containerfile_name, included_modules) in yard.name_to_module {
-        // Build fragments of split modules are hoisted to the start of the Containerfile, while
-        // finalize fragments are appended after all declared modules.
+        let mut directives = OutputDirectives::default();
+        // Fragment names determine placement; declaration order is preserved within each group.
         let mut build_fragment_parts: Vec<String> = Vec::new();
         let mut container_file_resolved_parts = Vec::new();
         let mut finalize_fragment_parts: Vec<String> = Vec::new();
         for included_module in included_modules {
             let label = included_module.source_info.label();
-            if included_module.split {
-                // Hoist the build fragment to the start.
-                let mut build_fragment = render(
-                    &tera,
-                    &included_module.containerfile_template,
-                    &included_module.provided_template_values,
-                    &included_module.source_info,
-                )?;
-                if with_cache_busting {
-                    let name = included_module
-                        .name
-                        .as_deref()
-                        .expect("Should be provided at this point");
-                    build_fragment = apply_cache_busting(&build_fragment, name);
-                }
-                let part = format!("####  {label} (build fragment)  ####\n\n{build_fragment}\n");
-                build_fragment_parts.push(part);
-                // Inject the install fragment where the module is declared.
-                let install_template = included_module
-                    .install_fragment_template
-                    .as_ref()
-                    .expect("Split modules must have an install fragment; this is checked in ModuleBuilder::build");
-                let mut install_fragment = render(
-                    &tera,
-                    install_template,
-                    &included_module.provided_template_values,
-                    &included_module.source_info,
-                )?;
-                if with_cache_busting {
-                    let name = included_module
-                        .name
-                        .as_deref()
-                        .expect("Should be provided at this point");
-                    install_fragment = apply_cache_busting(&install_fragment, name);
-                }
-                let part =
-                    format!("####  {label} (install fragment)  ####\n\n{install_fragment}\n");
-                container_file_resolved_parts.push(part);
-
-                if let Some(finalize_template) = included_module.finalize_fragment_template.as_ref()
-                {
-                    let mut finalize_fragment = render(
-                        &tera,
-                        finalize_template,
-                        &included_module.provided_template_values,
-                        &included_module.source_info,
-                    )?;
-                    if with_cache_busting {
-                        let name = included_module
-                            .name
-                            .as_deref()
-                            .expect("Should be provided at this point");
-                        finalize_fragment = apply_cache_busting(&finalize_fragment, name);
-                    }
-                    let part =
-                        format!("####  {label} (finalize fragment)  ####\n\n{finalize_fragment}\n");
-                    finalize_fragment_parts.push(part);
-                }
-            } else {
+            for (name, template, parts) in [
+                (
+                    "build",
+                    &included_module.fragments.build,
+                    &mut build_fragment_parts,
+                ),
+                (
+                    "main",
+                    &included_module.fragments.main,
+                    &mut container_file_resolved_parts,
+                ),
+                (
+                    "finalize",
+                    &included_module.fragments.finalize,
+                    &mut finalize_fragment_parts,
+                ),
+            ] {
+                let Some(template) = template else { continue };
                 let mut rendered_part = render(
-                    &tera,
-                    &included_module.containerfile_template,
+                    template,
+                    &included_module.scripts,
                     &included_module.provided_template_values,
                     &included_module.source_info,
+                    &mut directives,
                 )?;
                 if with_cache_busting {
                     let module_name = included_module
@@ -1379,34 +1286,38 @@ fn apply_templating(yard: Containerfiles, with_cache_busting: bool) -> eros::Res
                         .expect("Should be provided at this point");
                     rendered_part = apply_cache_busting(&rendered_part, module_name);
                 }
-                let part = format!("####  {label}  ####\n\n{rendered_part}\n");
-                container_file_resolved_parts.push(part);
+                parts.push(format!(
+                    "####  {label} ({name} fragment)  ####\n\n{rendered_part}\n"
+                ));
             }
         }
         let mut all_parts = build_fragment_parts;
         all_parts.extend(container_file_resolved_parts);
         all_parts.extend(finalize_fragment_parts);
-        outputs.push((containerfile_name, all_parts.join("\n")));
+        outputs.push((containerfile_name, directives.prepend(all_parts.join("\n"))));
     }
     Ok(outputs)
 }
 
 //************************************************************************//
 
-#[derive(PartialEq)]
-enum CapturingState {
-    None,
-    Containerfile,
-    Config,
+pub struct ModuleData {
+    pub fragments: Fragments,
+    pub scripts: HashMap<String, Script>,
+    pub config: String,
 }
 
-pub struct ModuleData {
-    pub containerfile: String,
-    pub config: String,
-    /// Install fragment for split modules. `None` when only one Containerfile block is present.
-    pub install_fragment: Option<String>,
-    /// Optional third fragment appended after all declared modules.
-    pub finalize_fragment: Option<String>,
+impl ModuleData {
+    pub fn plain(containerfile: String) -> Self {
+        Self {
+            fragments: Fragments {
+                main: Some(containerfile),
+                ..Fragments::default()
+            },
+            scripts: HashMap::new(),
+            config: String::new(),
+        }
+    }
 }
 
 #[eros::context("Could not read '{}' as a module.", &PathBuf::from(&path).display())]
@@ -1417,97 +1328,20 @@ pub async fn read_module_file(path: &Path) -> eros::Result<ModuleData> {
         .user_context(
             "Could not read a referenced module file. Check that it exists and is readable.",
         )?;
-    // Collect Containerfile blocks in the order they appear. Split modules use a build fragment,
-    // an install fragment, and optionally a finalize fragment.
-    let mut container_data: Vec<String> = Vec::new();
-    let mut config_data = None;
-    let mut capture_status = CapturingState::None;
-    let mut capture = String::new();
-    for line in data.lines() {
-        let compare_line = line.trim().to_lowercase();
-        if compare_line == "```yaml" {
-            if config_data.is_some() {
-                continue;
-            }
-            if capture_status != CapturingState::None {
-                return Err(user_error(
-                    "A module starts a YAML block before closing the previous fenced block.",
-                ));
-            }
-            capture_status = CapturingState::Config;
-            continue;
-        } else if compare_line == "```containerfile" || compare_line == "```dockerfile" {
-            if capture_status != CapturingState::None {
-                return Err(user_error(
-                    "A module starts a Containerfile block before closing the previous fenced block.",
-                ));
-            }
-            capture_status = CapturingState::Containerfile;
-            continue;
-        } else if compare_line == "```" {
-            match capture_status {
-                CapturingState::None => {
-                    // Could be another documentation block ignore
-                }
-                CapturingState::Containerfile => {
-                    container_data.push(capture.clone());
-                    capture.clear();
-                    capture_status = CapturingState::None;
-                }
-                CapturingState::Config => {
-                    config_data = Some(capture.clone());
-                    capture.clear();
-                    capture_status = CapturingState::None;
-                }
-            }
-            continue;
-        }
-        if capture_status != CapturingState::None {
-            capture.push_str(line);
-            capture.push('\n');
-        }
-    }
-    match capture_status {
-        CapturingState::Containerfile => {
-            return Err(user_error(
-                "A module has an unclosed Containerfile fenced block. Add a closing ``` line.",
-            ));
-        }
-        CapturingState::Config => {
-            return Err(user_error(
-                "A module has an unclosed YAML fenced block. Add a closing ``` line.",
-            ));
-        }
-        CapturingState::None => {}
-    }
-    match (container_data.is_empty(), config_data) {
-        (true, None) => {
-            // No sections found for either so interpret the entire file as a containerfile
-            Ok(ModuleData {
-                containerfile: data,
-                config: String::new(),
-                install_fragment: None,
-                finalize_fragment: None,
-            })
-        }
-        (true, Some(_)) => Err(user_error(
-            "A module has a YAML configuration block but no Containerfile block.",
-        )),
-        (false, config_data) => {
-            if container_data.len() > 3 {
-                return Err(user_error(format!(
-                    "A module has {} Containerfile blocks, but at most three are supported. Regular modules use one block; split modules use a build fragment, an install fragment, and an optional finalize fragment.",
-                    container_data.len()
-                )));
-            }
-            let mut fragments = container_data.into_iter();
-            Ok(ModuleData {
-                containerfile: fragments.next().expect("container_data is not empty"),
-                config: config_data.unwrap_or_default(),
-                install_fragment: fragments.next(),
-                finalize_fragment: fragments.next(),
-            })
-        }
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if name == "containerfile"
+        || name == "dockerfile"
+        || name.ends_with(".containerfile")
+        || name.ends_with(".dockerfile")
+    {
+        // Markdown-looking text in a native Containerfile's heredoc is literal content.
+        Ok(ModuleData::plain(data))
+    } else {
+        crate::module_markdown::parse(&data)
     }
 }
 

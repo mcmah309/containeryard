@@ -1,8 +1,8 @@
-```yaml
+```yaml name=config
 requires:
   - path: ../base.md
 ```
 
-```containerfile
+```containerfile name=main
 RUN echo consumer
 ```

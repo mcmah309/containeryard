@@ -1,6 +1,6 @@
-```yaml
-split: true
+```yaml name=config
+description: "A module contributing only a build fragment"
 ```
-```dockerfile
+```containerfile name=build
 FROM alpine AS builder
 ```

@@ -1,3 +1,3 @@
-```dockerfile
+```containerfile name=main
 # Empty
 ```

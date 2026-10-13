@@ -1,6 +1,6 @@
-```dockerfile
+```containerfile name=main
 RUN echo first
 ```
-```dockerfile
+```containerfile name=main
 RUN echo second
 ```

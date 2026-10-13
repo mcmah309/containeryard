@@ -84,10 +84,9 @@ impl GitProvider for Git {
             module_to_files.insert(
                 name,
                 ModuleFileData {
-                    containerfile_data: module_data.containerfile,
+                    fragments: module_data.fragments,
+                    scripts: module_data.scripts,
                     config_data: module_data.config,
-                    install_fragment_data: module_data.install_fragment,
-                    finalize_fragment_data: module_data.finalize_fragment,
                     source_info,
                 },
             );

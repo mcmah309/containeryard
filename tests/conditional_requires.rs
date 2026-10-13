@@ -25,7 +25,7 @@ impl Project {
         fs::write(
             project.path.join("modules/consumer.md"),
             format!(
-                "```yaml\nargs:\n  optional: [arg1, arg2, cuda, distro, workers]\nrequires:\n{requirements}\n```\n\n```containerfile\nRUN echo consumer\n```\n"
+                "```yaml name=config\nargs:\n  optional: [arg1, arg2, cuda, distro, workers]\nrequires:\n{requirements}\n```\n\n```containerfile name=main\nRUN echo consumer\n```\n"
             ),
         )
         .unwrap();

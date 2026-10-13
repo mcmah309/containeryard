@@ -1,4 +1,4 @@
-```yaml
+```yaml name=config
 args:
   required:
     - enabled
@@ -9,7 +9,7 @@ args:
     - fraction
 ```
 
-```Containerfile
+```Containerfile name=main
 RUN echo {{ enabled }} {{ disabled }} {{ message }}
 RUN echo {{ count + 1 }} {{ negative }} {{ fraction + 0.5 }}
 {% if enabled %}RUN echo enabled{% else %}RUN echo unexpected-enabled{% endif %}

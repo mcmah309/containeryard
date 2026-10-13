@@ -185,7 +185,7 @@ fn debug_errors_include_developer_context() {
 }
 
 #[test]
-fn split_modules() {
+fn named_fragments_preserve_placement_and_cache_busting() {
     let output_file = TestOutputFile::new("tests/split_modules");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
@@ -257,7 +257,7 @@ fn split_modules() {
 }
 
 #[test]
-fn multiple_blocks_require_split() {
+fn duplicate_fragment_names_are_rejected() {
     let _output = TestOutputFile::new("tests/non_split_multiple_blocks");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
@@ -265,23 +265,26 @@ fn multiple_blocks_require_split() {
         .arg("build")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("not marked as split"));
+        .stderr(predicate::str::contains(
+            "Containerfile fragment 'main' is declared more than once",
+        ));
 }
 
 #[test]
-fn split_modules_require_an_install_fragment() {
-    let _output = TestOutputFile::new("tests/split_missing_install");
+fn build_fragments_do_not_require_a_main_fragment() {
+    let output_file = TestOutputFile::new("tests/split_missing_install");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
         .current_dir("tests/split_missing_install")
         .arg("build")
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("has no install fragment"));
+        .success();
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    assert!(output.contains("FROM alpine AS builder"));
 }
 
 #[test]
-fn modules_reject_more_than_three_containerfile_blocks() {
+fn unknown_fragment_names_are_rejected() {
     let _output = TestOutputFile::new("tests/too_many_module_blocks");
     assert_cmd::Command::cargo_bin("yard")
         .unwrap()
@@ -289,7 +292,9 @@ fn modules_reject_more_than_three_containerfile_blocks() {
         .arg("build")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("at most three are supported"));
+        .stderr(predicate::str::contains(
+            "Unknown Containerfile fragment name 'extra'",
+        ));
 }
 
 #[test]

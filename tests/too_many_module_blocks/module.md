@@ -1,15 +1,15 @@
-```yaml
-split: true
+```yaml name=config
+description: "A module with an unknown fragment name"
 ```
-```dockerfile
+```containerfile name=build
 FROM alpine AS builder
 ```
-```dockerfile
+```containerfile name=main
 RUN echo install
 ```
-```dockerfile
+```containerfile name=finalize
 RUN echo finalize
 ```
-```dockerfile
+```containerfile name=extra
 RUN echo extra
 ```

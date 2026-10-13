@@ -5,7 +5,9 @@ mod build;
 mod cli;
 mod common;
 mod init;
+mod module_markdown;
 mod remote_resolvers;
+mod scripts;
 mod update;
 mod user_error;
 
