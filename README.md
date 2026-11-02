@@ -81,7 +81,7 @@ Build hooks run commands around `yard build`:
 hooks:
   build:
     pre: yard update
-    post: podman build -f development.Containerfile . -t my-image
+    post: docker build -f development.Containerfile . -t my-image
 ```
 
 The `pre` hook runs before module resolution, after which ContainerYard reloads `yard.yaml`. The `post` hook runs after all output files are written. Using `yard update` as the pre-hook keeps remote commits current.
@@ -335,7 +335,7 @@ for item in $(yard outputs); do
         tag="${item%.Containerfile}"
         
         echo "Building $tag from $item..."
-        podman build -f "$item" -t "$tag"
+        docker build -f "$item" -t "$tag"
     else
         echo "Error: File '$item' not found."
         exit 1

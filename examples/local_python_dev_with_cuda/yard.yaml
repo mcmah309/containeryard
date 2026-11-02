@@ -3,7 +3,7 @@
 # hooks:
 #   build:
 #     pre: yard update
-#     post: podman build . -t python-with-cuda
+#     post: docker build . -t python-with-cuda
 
 inputs:
   modules:

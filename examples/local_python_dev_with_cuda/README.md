@@ -4,8 +4,8 @@ Generate `Containerfile` and download the required `setup_bash.sh` file with:
 yard build .
 ```
 
-To build the image automatically, uncomment the Podman post-hook in `yard.yaml`, or run:
+To build the image automatically, uncomment the Docker post-hook in `yard.yaml`, or run:
 
 ```bash
-podman build . -t python-with-cuda
+docker build . -t python-with-cuda
 ```
