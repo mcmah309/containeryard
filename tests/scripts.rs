@@ -264,7 +264,7 @@ RUN {{ script(name="setup", template=true) }}
     assert_eq!(execute_scripts(&first), "first\nother\nfirst\nfirst\n");
     assert_eq!(execute_scripts(&second), "second\nother\nsecond\nsecond\n");
     assert!(first.starts_with("# syntax=docker/dockerfile:1\n\n"));
-    assert_eq!(first.matches("ARG CACHE_BUST_SPLIT=1").count(), 3);
+    assert!(!first.contains("ARG CACHE_BUST_"));
 }
 
 #[test]
@@ -401,7 +401,7 @@ fn script_template_errors_identify_the_named_script() {
 }
 
 #[test]
-fn parser_directives_are_hoisted_deduplicated_and_preserved_with_cache_busting() {
+fn parser_directives_are_hoisted_deduplicated_and_preserved() {
     let first = "```containerfile name=main\n# syntax=docker/dockerfile:1.7\n# escape=\\\nFROM busybox\n```\n";
     let second = "```sh name=setup\necho works\n```\n```containerfile name=main\n# syntax=docker/dockerfile:1.7\n# check=error=true\nRUN {{ script(name=\"setup\") }}\n```\n";
     let project = Project::new(

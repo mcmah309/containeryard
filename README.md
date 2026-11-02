@@ -202,7 +202,7 @@ outputs:
 
 ### Putting It All Together
 
-Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build --no-cache-busting` would be
+Combining the examples from the [Module Parts](#module-parts) section, the output of `yard build` would be
 ```dockerfile
 FROM alpine:3.20.0
 
@@ -261,7 +261,7 @@ outputs:
     - RUN echo after
 ```
 
-With `yard build --no-cache-busting`, the generated instructions are:
+With `yard build`, the generated instructions are:
 
 ```dockerfile
 FROM python:3.11-slim AS python-deps-builder
@@ -343,23 +343,14 @@ for item in $(yard outputs); do
 done
 ```
 
-### Cache Busting
+### Build Cache
 
-`yard build` inserts a cache-busting argument before each module fragment by default:
-
-```dockerfile
-ARG CACHE_BUST_<MODULE_NAME>=1
-```
-
-This lets you bust the build cache for specific modules using podman/docker's `--build-arg` flag, e.g.:
-
-```bash
-podman build --build-arg CACHE_BUST_RUST_ESSENTIALS=$(date +%s) -t my-app .
-```
-
-Module names come from the `yard.yaml` output declarations (e.g. `rust-essentials:`).
-
-Use `yard build --no-cache-busting` to omit these arguments.
+Docker handles cache invalidation for changes to generated instructions and copied inputs.
+To force a rebuild, use `docker build --no-cache`, or use
+`docker build --no-cache-filter <stage>` to rebuild a specific named stage.
+This is useful when an unchanged `RUN` instruction needs to fetch newer packages,
+since changes in package repositories do not automatically invalidate its cache.
+See [Docker's cache invalidation documentation](https://docs.docker.com/build/cache/invalidation/).
 
 ### Embedded Scripts
 

@@ -42,13 +42,11 @@ async fn main() {
             Commands::Build {
                 path,
                 do_not_refetch,
-                no_cache_busting,
                 ignore_requires,
                 ignore_all_requires,
             } => build(
                 &path,
                 do_not_refetch,
-                !no_cache_busting,
                 ignore_requires,
                 ignore_all_requires,
             )

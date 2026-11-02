@@ -185,7 +185,7 @@ fn debug_errors_include_developer_context() {
 }
 
 #[test]
-fn named_fragments_preserve_placement_and_cache_busting() {
+fn named_fragments_preserve_placement() {
     let output_file = TestOutputFile::new("tests/split_modules");
     let assert = assert_cmd::Command::cargo_bin("yard")
         .unwrap()
@@ -195,10 +195,7 @@ fn named_fragments_preserve_placement_and_cache_busting() {
     assert.success();
     let output = fs::read_to_string(output_file.path()).unwrap();
 
-    // Cache busting is enabled by default for every named and inline fragment.
-    assert_eq!(output.matches("ARG CACHE_BUST_PYTHON_DEPS=1").count(), 3);
-    assert_eq!(output.matches("ARG CACHE_BUST_TWO_FRAGMENT=1").count(), 2);
-    assert!(output.contains("ARG CACHE_BUST_INLINE_0=1"));
+    assert!(!output.contains("ARG CACHE_BUST_"));
 
     // The build fragment must be hoisted to the start of the generated Containerfile.
     let build_fragment_idx = output
@@ -248,16 +245,6 @@ fn named_fragments_preserve_placement_and_cache_busting() {
         .find("COPY --from=metadata-builder /etc/alpine-release /tmp/alpine-release")
         .expect("two-fragment split module should be present");
     assert!(two_fragment_install_idx < finalize_fragment_idx);
-
-    let assert = assert_cmd::Command::cargo_bin("yard")
-        .unwrap()
-        .current_dir("tests/split_modules")
-        .arg("build")
-        .arg("--no-cache-busting")
-        .assert();
-    assert.success();
-    let output = fs::read_to_string(output_file.path()).unwrap();
-    assert!(!output.contains("ARG CACHE_BUST_"));
 }
 
 #[test]

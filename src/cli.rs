@@ -21,9 +21,6 @@ pub enum Commands {
         /// get overriden.
         #[clap(long, default_value = "false")]
         do_not_refetch: bool,
-        /// Omit the cache-busting `ARG` statements normally injected before each module fragment.
-        #[clap(long, default_value = "false")]
-        no_cache_busting: bool,
         /// Skip `requires` checks for these module names. May be repeated or supplied as a comma-separated list.
         #[clap(long, value_delimiter = ',')]
         ignore_requires: Vec<String>,

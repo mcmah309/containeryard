@@ -117,7 +117,7 @@ fn each_fragment_works_independently() {
         project.command().assert().success();
         let output = project.output();
         assert!(output.contains(&format!("({name} fragment)")));
-        assert_eq!(output.matches("ARG CACHE_BUST_MODULE=1").count(), 1);
+        assert!(!output.contains("ARG CACHE_BUST_"));
         assert!(output.contains(&format!("FROM busybox\nRUN echo {name}")));
     }
 }
